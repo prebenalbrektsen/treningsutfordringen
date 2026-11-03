@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { User } from "@/lib/auth";
 import { SHARE_OPTIONS } from "@/lib/sharing";
 
@@ -10,7 +11,10 @@ export function StravaShareFields({ user, missing }: { user: User; missing?: boo
         <li>🔒 Øktene fra Strava er <strong>bare synlige for deg</strong> til du sjekker dem inn.</li>
         <li>✅ Når du sjekker inn, ser gruppa <strong>sport, dag, varighet og bildet ditt</strong>.</li>
         <li>🕶️ Også økter du har satt som private på Strava hentes – men bare du kan se dem før innsjekk.</li>
+        <li>📥 Vi henter øktene dine (sport, tid, varighet, distanse, høydemeter, puls og navn) automatisk fra Strava når du lagrer dem der. Vi skriver aldri noe til Strava.</li>
+        <li>↩️ Du kan trekke samtykket når som helst: koble fra under Meg, eller på strava.com. Da slettes Strava-dataene dine med en gang.</li>
       </ul>
+      <p className="text-xs text-muted">Les mer i <Link href="/personvern" className="underline">personvernerklæringen</Link>.</p>
       {undecided && <p className="text-sm text-muted">Vi har krysset av for det som vises i dag (unntatt puls) – fjern det du ikke vil dele.</p>}
 
       <label className={`flex items-start gap-3 rounded-xl p-3 ${missing ? "bg-bad-soft" : "bg-heat-soft"}`}>

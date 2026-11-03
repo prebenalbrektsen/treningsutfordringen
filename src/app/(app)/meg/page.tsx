@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ConfirmAction } from "@/components/ConfirmAction";
 import { CelebrationsFor } from "@/components/CelebrationsFor";
 import { PushSettings } from "@/components/PushSettings";
 import { CATEGORIES } from "@/lib/push";
@@ -33,9 +34,9 @@ const STRAVA_MSG: Record<string, [string, string]> = {
   frakoblet: ["Strava er koblet fra. Du kan fortsatt logge økter selv.", "text-ok bg-ok-soft"],
 };
 
-export default async function MePage({ searchParams }: { searchParams: Promise<{ strava?: string }> }) {
+export default async function MePage({ searchParams }: { searchParams: Promise<{ strava?: string; n?: string; b?: string }> }) {
   const user = await requireUser();
-  const { strava } = await searchParams;
+  const { strava, n, b } = await searchParams;
   const prefs = (await one<{ notify: Record<string, boolean> }>("select notify from users where id = $1", [user.id]))!.notify;
   const categories = Object.fromEntries(Object.entries(CATEGORIES).filter(([k]) => k !== "admin" || user.is_admin));
   const passkeys = await query<{ id: number; name: string; last_used_at: Date | null; created_at: Date }>(
@@ -59,6 +60,11 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
           <h1 className="display line-clamp-2 text-4xl break-words sm:text-5xl">{user.name}</h1>
         </div>
       </div>
+      {strava === "slettet" && (
+        <p className="rounded-xl bg-ok-soft px-4 py-3 font-semibold text-ok">
+          Strava er koblet fra og dataene dine derfra er slettet: {n ?? 0} økter fjernet{Number(b) > 0 ? `, ${b} innsjekkede beholder bare sport, dag og varighet` : ""}.
+        </p>
+      )}
       {strava && STRAVA_MSG[strava] && <p className={`rounded-xl px-4 py-3 font-semibold ${STRAVA_MSG[strava][1]}`}>{STRAVA_MSG[strava][0]}</p>}
 
       <section className="card p-4">
@@ -78,7 +84,14 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
             <>
               <SyncButton />
               <Link href="/strava-deling" className="btn btn-ghost btn-sm">Hva deles?</Link>
-              <form action={stravaDisconnect}><button className="btn btn-ghost btn-sm">Koble fra</button></form>
+              <ConfirmAction action={stravaDisconnect} className="btn btn-ghost btn-sm" label="Koble fra" title="Koble fra Strava?" confirm="Ja, koble fra og slett">
+                <p>Alt vi har hentet fra Strava slettes med en gang, og nye økter kommer ikke inn lenger.</p>
+                <ul className="list-disc space-y-1 pl-5">
+                  <li><strong>Økter du ikke har sjekket inn</strong> forsvinner helt.</li>
+                  <li><strong>Innsjekkede økter</strong> blir stående med bare sport, dag, varighet og bildet ditt, så ukene dine fortsatt stemmer. Distanse, puls, høydemeter og navn fjernes.</li>
+                </ul>
+                <p className="text-muted">Du kan koble til igjen senere – da hentes øktene på nytt fra Strava.</p>
+              </ConfirmAction>
               <PoweredByStrava className="mt-1 block w-full" />
             </>
           ) : stravaConfigured() ? (
@@ -182,6 +195,7 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
         </ActionForm>
       </section>
 
+      <p className="text-center text-sm"><Link href="/personvern" className="font-semibold text-muted underline">Personvern og vilkår</Link></p>
       <form action={logout} className="pb-4 text-center"><button className="text-sm font-semibold text-muted underline">Logg ut</button></form>
     </div>
   );

@@ -12,7 +12,7 @@ import { ActivateWebhook } from "@/components/ActivateWebhook";
 import { UNDECIDED_SHARE_UNTIL } from "@/lib/sharing";
 import { addDays, ago, formatDay, formatWeekRange, isoWeekNumber, mondayOf, osloDate, relativeTime } from "@/lib/time";
 import { sportLabel } from "@/lib/sports";
-import { activateStravaWebhook, adminSyncStrava, approveUser, removeInvite, confirmAllClaimed, createGroupLink, disableGroupLink, remindStravaChoice, rejectUser, deleteTask, newInvite, saveChallenge, saveTask, setFine, settleAll, toggleInvite, toggleMember, countThisWeek } from "../actions";
+import { activateStravaWebhook, adminSyncStrava, approveUser, removeInvite, confirmAllClaimed, createGroupLink, disableGroupLink, remindStravaChoice, savePrivacyContact, rejectUser, deleteTask, newInvite, saveChallenge, saveTask, setFine, settleAll, toggleInvite, toggleMember, countThisWeek } from "../actions";
 
 const TABS = [
   { id: "boter", label: "Bøter" },
@@ -97,6 +97,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   const allUsers = await query<{ id: number; name: string; email: string | null; invite_token: string | null; is_admin: boolean; strava: boolean; approved: boolean; created_at: Date; activated: boolean }>(
     "select id, name, email, invite_token, is_admin, strava_athlete_id is not null as strava, approved, created_at, password_hash is not null as activated from users order by name",
   );
+  const privacyContact = (await query<{ value: string }>("select value from settings where key = 'privacy_contact'"))[0]?.value ?? "";
   // Haven't done the one-time setup (notifications + Strava sharing) yet.
   const undecided = await query<{ name: string }>(
     "select name from users where approved and (setup_done_at is null or (strava_athlete_id is not null and strava_consent_at is null)) order by name",
@@ -355,6 +356,14 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
 
           {tab === "regler" && (
             <>
+              <section className="card space-y-2 p-4">
+                <h2 className="font-bold">Kontakt for personvern</h2>
+                <p className="text-sm text-muted">Vises i <Link href="/personvern" className="underline">personvernerklæringen</Link> som ansvarlig og kontakt. Tomt = «si fra til Kontrolløren i appen». Strava krever en personvernerklæring, og GDPR at det står hvem som er ansvarlig.</p>
+                <form action={savePrivacyContact} className="flex gap-2">
+                  <input name="contact" defaultValue={privacyContact} placeholder="Navn, e-post" className="field flex-1" />
+                  <button className="btn btn-sm">Lagre</button>
+                </form>
+              </section>
               <section className="card space-y-2 p-4">
                 <h2 className="font-bold">Forhåndsvis feiringer</h2>
                 <p className="text-sm text-muted">Slik ser det ut når uka er over (vises én gang, første gang de åpner appen etter søndag), når noen sparer en joker eller får et nytt merke.</p>

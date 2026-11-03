@@ -180,8 +180,17 @@ export async function syncNow(): Promise<ActionState> {
 
 export async function stravaDisconnect(): Promise<void> {
   const user = await requireUser();
-  await disconnectStrava(user.id);
+  const r = await disconnectStrava(user.id);
   revalidatePath("/", "layout");
+  redirect(`/meg?strava=slettet&n=${r.deleted}&b=${r.stripped}`);
+}
+
+/** Deletes everything that came from Strava, also checked-in workouts (on request, policy §2.5). */
+export async function stravaDeleteEverything(): Promise<void> {
+  const user = await requireUser();
+  const r = await disconnectStrava(user.id, true);
+  revalidatePath("/", "layout");
+  redirect(`/meg?strava=slettet&n=${r.deleted}&b=0`);
 }
 
 // ---- Admin ----
@@ -562,5 +571,15 @@ export async function remindStravaChoice(): Promise<void> {
     url: "/oppsett",
     tag: "oppsett",
   });
+  revalidatePath("/admin");
+}
+
+/** Admin: who is responsible for privacy, shown on /personvern (e.g. «Ola Nordmann, ola@example.no»). */
+export async function savePrivacyContact(form: FormData): Promise<void> {
+  await requireAdmin();
+  const value = String(form.get("contact") ?? "").trim().slice(0, 200);
+  if (value) await query("insert into settings (key, value) values ('privacy_contact', $1) on conflict (key) do update set value = excluded.value", [value]);
+  else await query("delete from settings where key = 'privacy_contact'");
+  revalidatePath("/personvern");
   revalidatePath("/admin");
 }

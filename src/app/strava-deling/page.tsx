@@ -1,6 +1,9 @@
 import { Logo } from "@/components/Logo";
 import { StravaShareFields } from "@/components/StravaShareFields";
 import { requireUser } from "@/lib/auth";
+import Link from "next/link";
+import { ConfirmAction } from "@/components/ConfirmAction";
+import { stravaDeleteEverything } from "@/app/(app)/actions";
 import { declineSharing, saveSharing } from "./actions";
 
 /**
@@ -23,10 +26,25 @@ export default async function StravaSharingPage({ searchParams }: { searchParams
         <button className="btn btn-heat w-full">{koble ? "Lagre og koble til Strava" : "Lagre"}</button>
       </form>
       {user.strava_athlete_id && (
-        <form action={declineSharing} className="mt-4 text-center">
-          <button className="text-sm font-semibold text-muted underline">Nei takk – koble fra Strava</button>
-        </form>
+        <section className="card mt-4 space-y-3 p-5 text-sm">
+          <h2 className="font-bold">Koble fra og slette</h2>
+          <p className="text-muted">Kobler du fra, slettes alt vi har hentet fra Strava med en gang. Økter du alt har sjekket inn beholder bare sport, dag, varighet og bildet ditt, så ukene dine fortsatt stemmer.</p>
+          <ConfirmAction action={declineSharing} className="btn btn-ghost btn-sm" label="Koble fra Strava og slett dataene" title="Koble fra Strava?" confirm="Ja, koble fra og slett">
+            <p>Alt vi har hentet fra Strava slettes med en gang, og nye økter kommer ikke inn lenger.</p>
+                <ul className="list-disc space-y-1 pl-5">
+                  <li><strong>Økter du ikke har sjekket inn</strong> forsvinner helt.</li>
+                  <li><strong>Innsjekkede økter</strong> blir stående med bare sport, dag, varighet og bildet ditt, så ukene dine fortsatt stemmer. Distanse, puls, høydemeter og navn fjernes.</li>
+                </ul>
+                <p className="text-muted">Du kan koble til igjen senere – da hentes øktene på nytt fra Strava.</p>
+          </ConfirmAction>
+          <p className="text-muted">Vil du at også de innsjekkede øktene skal bort? Da kan uker som var i boks bli stående uten nok økter.</p>
+          <ConfirmAction action={stravaDeleteEverything} className="text-sm font-semibold text-bad underline" label="Slett alt fra Strava, også innsjekkede økter" title="Slette alt fra Strava?" confirm="Ja, slett alt">
+            <p>Strava kobles fra, og <strong>alle</strong> øktene som kom fra Strava slettes – også de du har sjekket inn, med bilder, kudos og kommentarer.</p>
+            <p className="font-semibold text-bad">Uker som var i boks kan da mangle økter, og det kan gi bot for uker som er ferdige. Dette kan ikke angres.</p>
+          </ConfirmAction>
+        </section>
       )}
+      <p className="mt-4 text-center text-sm"><Link href="/personvern" className="font-semibold text-muted underline">Personvern og vilkår</Link></p>
     </main>
   );
 }

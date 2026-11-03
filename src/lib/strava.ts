@@ -66,7 +66,13 @@ async function accessToken(userId: number): Promise<string | null> {
   return t.access_token;
 }
 
-export async function disconnectStrava(userId: number): Promise<void> {
+/**
+ * Disconnects and deletes the person's Strava data (Strava's API policy §2.5/§6.3: when access ends
+ * or on request, within 48 hours – done right away). Workouts never checked in are deleted. Checked-in
+ * ones keep only what the challenge needs (sport, day, duration, their own photo, kudos and comments)
+ * unless `everything`, which deletes those too – past weeks may then lose workouts.
+ */
+export async function disconnectStrava(userId: number, everything = false): Promise<{ deleted: number; stripped: number }> {
   const token = await accessToken(userId).catch(() => null);
   // oauth/revoke replaces oauth/deauthorize (the only one accepted from 1 June 2027).
   if (token) {
@@ -77,11 +83,37 @@ export async function disconnectStrava(userId: number): Promise<void> {
       body: new URLSearchParams({ token, token_type_hint: "access_token" }),
     }).catch(() => {});
   }
+  return deleteStravaData(userId, everything);
+}
+
+/** The deletion half of disconnectStrava, also used when Strava says the person revoked access. */
+export async function deleteStravaData(userId: number, everything = false): Promise<{ deleted: number; stripped: number }> {
+  const athlete = await one<{ strava_athlete_id: string | null }>("select strava_athlete_id::text from users where id = $1", [userId]);
+  const deleted = await query(
+    `delete from workouts where user_id = $1 and source = 'strava' and (checked_in_at is null or $2) returning 1`,
+    [userId, everything],
+  );
+  const stripped = await query(
+    `update workouts set distance_m = null, elevation_m = null, avg_hr = null, title = null, strava_id = null
+      where user_id = $1 and source = 'strava' returning 1`,
+    [userId],
+  );
   await query(
-    `update users set strava_athlete_id = null, strava_access_token = null, strava_refresh_token = null, strava_expires_at = null
+    `update users set strava_athlete_id = null, strava_access_token = null, strava_refresh_token = null, strava_expires_at = null,
+            strava_consent_at = null, share_distance = false, share_elevation = false, share_hr = false, share_title = false
       where id = $1`,
     [userId],
   );
+  if (athlete?.strava_athlete_id) await query("delete from strava_events where owner_id = $1", [athlete.strava_athlete_id]);
+  await query("delete from strava_events where user_id = $1", [userId]);
+  // Written confirmation (policy §2.5): a push to the person, besides the message on screen.
+  await push([userId], "test", {
+    title: "Strava-dataene dine er slettet",
+    body: `Strava er koblet fra. ${deleted.length} økter slettet${stripped.length ? `, ${stripped.length} innsjekkede beholder bare sport, dag og varighet` : ""}.`,
+    url: "/meg",
+    tag: "strava-slettet",
+  }).catch(() => {});
+  return { deleted: deleted.length, stripped: stripped.length };
 }
 
 type Activity = {
@@ -262,8 +294,9 @@ async function handleWebhookEventInner(e: WebhookEvent): Promise<void> {
     // The person revoked access on strava.com.
     if (e.updates?.authorized === "false") {
       if (!(await accessRevoked(user.id))) return logEvent(e, user.id, "frakobling som Strava ikke bekrefter – ignorert");
-      await query("update users set strava_athlete_id = null, strava_access_token = null, strava_refresh_token = null, strava_expires_at = null where id = $1", [user.id]);
-      return logEvent(e, user.id, "koblet fra på strava.com");
+      await logEvent(e, user.id, "koblet fra på strava.com – Strava-data slettet");
+      await deleteStravaData(user.id);
+      return;
     }
     return logEvent(e, user.id, "profilendring – ignorert");
   }

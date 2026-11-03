@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { Logo } from "@/components/Logo";
+import { ConfirmAction } from "@/components/ConfirmAction";
 import { PushSettings } from "@/components/PushSettings";
 import { StravaShareFields } from "@/components/StravaShareFields";
 import { requireUser } from "@/lib/auth";
@@ -65,9 +66,16 @@ export default async function SetupPage({ searchParams }: { searchParams: Promis
         <button className="btn btn-heat w-full text-lg">Ferdig – til appen 💪</button>
       </form>
       {user.strava_athlete_id && (
-        <form action={declineSharing} className="text-center">
-          <button className="text-sm font-semibold text-muted underline">Nei takk – koble fra Strava</button>
-        </form>
+        <div className="text-center">
+          <ConfirmAction action={declineSharing} className="text-sm font-semibold text-muted underline" label="Nei takk – koble fra Strava" title="Koble fra Strava?" confirm="Ja, koble fra og slett">
+            <p>Alt vi har hentet fra Strava slettes med en gang, og nye økter kommer ikke inn lenger.</p>
+                <ul className="list-disc space-y-1 pl-5">
+                  <li><strong>Økter du ikke har sjekket inn</strong> forsvinner helt.</li>
+                  <li><strong>Innsjekkede økter</strong> blir stående med bare sport, dag, varighet og bildet ditt, så ukene dine fortsatt stemmer. Distanse, puls, høydemeter og navn fjernes.</li>
+                </ul>
+                <p className="text-muted">Du kan koble til igjen senere – da hentes øktene på nytt fra Strava.</p>
+          </ConfirmAction>
+        </div>
       )}
     </main>
   );

@@ -17,6 +17,8 @@ export async function GET(request: Request) {
   if (!process.env.CRON_SECRET || request.headers.get("authorization") !== `Bearer ${process.env.CRON_SECRET}`) {
     return new Response("Nei", { status: 401 });
   }
+  // The Strava diagnostics log is only for troubleshooting: keep 30 days (data minimisation).
+  await query("delete from strava_events where created_at < now() - interval '30 days'");
   // One-time heads-up about the new address (see lib/moved.ts), sent to every phone, whatever its settings.
   if (movedNotice() && (await once("moved:treningsutfordring"))) {
     await push(await everyoneBut(null), "test", {

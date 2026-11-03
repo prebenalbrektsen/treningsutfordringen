@@ -24,8 +24,8 @@ export async function saveSharing(form: FormData): Promise<void> {
 /** Says no: Strava is disconnected and the consent withdrawn. Workouts already checked in stay. */
 export async function declineSharing(): Promise<void> {
   const user = await requireUser();
-  await disconnectStrava(user.id);
-  await query("update users set strava_consent_at = null, setup_done_at = coalesce(setup_done_at, now()) where id = $1", [user.id]);
+  const r = await disconnectStrava(user.id);
+  await query("update users set setup_done_at = coalesce(setup_done_at, now()) where id = $1", [user.id]);
   revalidatePath("/", "layout");
-  redirect("/meg?strava=frakoblet");
+  redirect(`/meg?strava=slettet&n=${r.deleted}&b=${r.stripped}`);
 }
