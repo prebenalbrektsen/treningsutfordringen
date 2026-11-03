@@ -1,3 +1,4 @@
+import { PoweredByStrava } from "@/components/StravaBrand";
 import Link from "next/link";
 import { Avatar } from "@/components/Avatar";
 import { StatTiles } from "@/components/StatTiles";
@@ -135,6 +136,7 @@ export default async function StatsPage({ searchParams }: { searchParams: Promis
           {!all.bySport.length && <li className="py-2 text-sm text-muted">Ingen økter ennå.</li>}
         </ul>
       </section>
+      <PoweredByStrava className="block pt-2 pb-4" />
     </div>
   );
 }

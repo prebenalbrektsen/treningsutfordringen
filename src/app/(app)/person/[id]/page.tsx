@@ -1,3 +1,4 @@
+import { PoweredByStrava } from "@/components/StravaBrand";
 import { notFound } from "next/navigation";
 import { Avatar } from "@/components/Avatar";
 import { BackLink } from "@/components/BackLink";
@@ -123,6 +124,7 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
           {!p.workouts.some((w) => w.checked_in_at) && <li className="py-3 text-sm text-muted">Ingen innsjekkede økter ennå – gi {first} et heiarop i Prat! 📣</li>}
         </ul>
       </section>
+      <PoweredByStrava className="block pt-2 pb-4" />
     </div>
   );
 }

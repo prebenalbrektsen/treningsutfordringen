@@ -1,3 +1,4 @@
+import { PoweredByStrava } from "@/components/StravaBrand";
 import { CelebrationsFor } from "@/components/CelebrationsFor";
 import { applyJokers } from "./actions";
 import { JokerInfo } from "@/components/Celebrate";
@@ -301,6 +302,7 @@ export default async function WeekPage({ searchParams }: { searchParams: Promise
           <p className={`display mt-1 text-3xl ${potOpen ? "text-bad" : ""}`}><Count value={potOpen} suffix=" kr" /></p>
         </div>
       </section>
+      <PoweredByStrava className="block pt-2 pb-4" />
     </div>
   );
 }
