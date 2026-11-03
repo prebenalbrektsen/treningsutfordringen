@@ -41,7 +41,9 @@ values (1, coalesce((select name from challenges order by starts_on desc limit 1
 select setval('groups_id_seq', 1);
 insert into group_members (group_id, user_id, role, approved)
   select 1, id, case when is_admin then 'admin' else 'member' end, approved from users;
-update users set current_group_id = 1, is_sysadmin = is_admin;
+update users set current_group_id = 1;
+-- Only the account that set up the app (the first admin) owns it; other admins stay group admins.
+update users set is_sysadmin = true where id = (select min(id) from users where is_admin);
 delete from settings where key = 'group_invite';
 
 alter table challenges add column group_id int references groups(id) on delete cascade;
