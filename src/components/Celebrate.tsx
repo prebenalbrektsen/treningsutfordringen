@@ -3,6 +3,9 @@
 import confetti from "canvas-confetti";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
+import type { WeekRecap } from "@/lib/recap";
+import { fmtKm } from "@/lib/stats";
+import { formatMinutes } from "@/lib/time";
 
 // Celebrations: a card spins in with confetti when you earn a joker or a badge. Each one is shown
 // once (remembered in this browser); several queue up one after another.
@@ -71,8 +74,97 @@ function JokerRules({ held, max, every }: { held: number; max: number; every: nu
 }
 
 type Item =
+  | { kind: "recap"; recap: WeekRecap }
   | { kind: "joker"; count: number }
   | { kind: "badge"; id: string; title: string; emoji: string; how: string };
+
+function Ring({ done, needed, passed }: { done: number; needed: number; passed: boolean }) {
+  const size = 96, stroke = 9, radius = (size - stroke) / 2, circ = 2 * Math.PI * radius;
+  const shown = Math.min(done, needed);
+  return (
+    <div className="relative shrink-0" style={{ width: size, height: size }} role="img" aria-label={`${shown} av ${needed} økter`}>
+      <svg width={size} height={size} className="-rotate-90">
+        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="rgba(255,255,255,.25)" strokeWidth={stroke} />
+        <motion.circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#fff" strokeWidth={stroke} strokeLinecap="round"
+          strokeDasharray={circ} initial={{ strokeDashoffset: circ }} animate={{ strokeDashoffset: circ * (1 - shown / needed) }}
+          transition={{ duration: 1.1, delay: 0.5, ease: [0.16, 1, 0.3, 1] }} />
+      </svg>
+      <div className="absolute inset-0 grid place-items-center">
+        <span className="display text-3xl leading-none">{shown}<span className="text-lg opacity-70">/{needed}</span></span>
+      </div>
+    </div>
+  );
+}
+
+function Tile({ label, value, note }: { label: string; value: string; note?: string }) {
+  return (
+    <div className="rounded-xl bg-paper p-3">
+      <p className="text-[11px] font-bold tracking-wider text-muted uppercase">{label}</p>
+      <p className="display mt-0.5 text-2xl leading-tight">{value}</p>
+      {note && <p className="text-xs font-semibold text-muted">{note}</p>}
+    </div>
+  );
+}
+
+function delta(now: number, before: number, unit: (n: number) => string): string | undefined {
+  if (now === before) return "som forrige uke";
+  return `${now > before ? "+" : "−"}${unit(Math.abs(now - before))} fra forrige`;
+}
+
+/** «Din uke»: last week's result, numbers, place in the family and a push for the new week. */
+function RecapCard({ recap: r, onNext }: { recap: WeekRecap; onNext: () => void }) {
+  const chips = [
+    r.people > 1 && `🏆 Nr. ${r.rank} av ${r.people} på treningstid`,
+    r.first && "🥇 Først i mål",
+    r.streak >= 2 && `🔥 ${r.streak} uker på rad`,
+    r.topSport && `⭐ Mest: ${r.topSport}`,
+    r.task && `📝 Ukeskrav ${r.task.met ? "✓" : "✗"}`,
+  ].filter(Boolean) as string[];
+  return (
+    <motion.div className="card w-full overflow-hidden p-0" initial={{ y: 40, opacity: 0, scale: 0.95 }} animate={{ y: 0, opacity: 1, scale: 1 }}
+      transition={{ type: "spring", stiffness: 140, damping: 16 }}>
+      <div className={`flex items-center gap-4 p-5 text-white ${r.passed ? "bg-gradient-to-br from-[#ff7a4d] via-[#ff4d1c] to-[#c2410c]" : "bg-gradient-to-br from-[#3a3630] to-[#14130f]"}`}>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-bold tracking-wider uppercase opacity-80">Din uke {r.weekNo} · {r.range}</p>
+          <p className="display mt-1 text-4xl leading-none">{r.passed ? "I boks!" : "Ikke i boks"}</p>
+          <p className="mt-1.5 text-sm font-semibold opacity-90">
+            {r.passed
+              ? r.jokersUsed ? `Med ${r.jokersUsed === 1 ? "1 joker" : `${r.jokersUsed} jokere`} 🃏` : "Ingen bot denne uka 🎉"
+              : r.fined ? `${r.penaltyKr} kr i bøtta 💸` : "Ingen bot – den er strøket"}
+          </p>
+        </div>
+        <Ring done={r.credits + r.jokersUsed} needed={r.needed} passed={r.passed} />
+      </div>
+      <div className="space-y-4 p-5">
+        <p className="font-semibold">{r.message}</p>
+        <div className="grid grid-cols-2 gap-2">
+          <Tile label="Økter" value={String(r.sessions)} note={r.prev ? delta(r.sessions, r.prev.sessions, String) : undefined} />
+          <Tile label="Tid" value={formatMinutes(r.minutes)} note={r.prev ? delta(r.minutes, r.prev.minutes, formatMinutes) : undefined} />
+          {r.km > 0 ? <Tile label="Distanse" value={`${fmtKm(r.km)} km`} note={r.elevation > 0 ? `${Math.round(r.elevation)} høydemeter` : undefined} /> : null}
+          <Tile label="Lengste økt" value={r.longest ? formatMinutes(r.longest) : "–"} />
+        </div>
+        {chips.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {chips.map((t) => <span key={t} className="rounded-full bg-heat-soft px-2.5 py-1 text-xs font-bold">{t}</span>)}
+          </div>
+        )}
+        {r.family.total > 1 && (
+          <div className="rounded-xl border border-line p-3 text-sm">
+            <p className="font-bold">Hele gjengen</p>
+            <p className="text-muted">
+              {r.family.made === r.family.total ? "Alle" : `${r.family.made} av ${r.family.total}`} klarte uka · {r.family.sessions} økter · {formatMinutes(r.family.minutes)}
+              {r.family.km >= 1 ? ` · ${fmtKm(r.family.km)} km` : ""}
+            </p>
+          </div>
+        )}
+        {r.weeksLeft > 0 && (
+          <p className="text-center text-sm text-muted">{r.weeksLeft === 1 ? "Siste uke nå – avslutt med stil!" : `${r.weeksLeft} uker igjen av utfordringen.`}</p>
+        )}
+        <button type="button" autoFocus onClick={onNext} className="btn btn-heat w-full">{r.passed ? "Videre! 💪" : "Ny uke – kjør på! 💪"}</button>
+      </div>
+    </motion.div>
+  );
+}
 
 function Dialog({ children, onClose, label }: { children: React.ReactNode; onClose: () => void; label: string }) {
   useEffect(() => {
@@ -123,26 +215,35 @@ function Spin({ children }: { children: React.ReactNode }) {
  * Shows new jokers and badges since last time, one at a time. The first visit only remembers the
  * current state (so nobody gets a pile of old badges at once).
  */
-export function Celebrations({ userId, challengeId, jokers, badges }: {
+export function Celebrations({ userId, challengeId, jokers, badges, recap }: {
   userId: number;
   challengeId: number;
+  recap?: WeekRecap | null;
   jokers: { earnedTotal: number; held: number; max: number; every: number; enabled: boolean };
   badges: { id: string; title: string; emoji: string; how: string }[];
 }) {
   const [queue, setQueue] = useState<Item[]>([]);
   useEffect(() => {
+    // Last week's recap: once per week, also on someone's very first visit.
+    const recapItems: Item[] = [];
+    if (recap) {
+      const recapKey = `sb-recap-${userId}-${challengeId}-${recap.week}`;
+      let shown = false;
+      try { shown = !!localStorage.getItem(recapKey); localStorage.setItem(recapKey, "1"); } catch { shown = true; }
+      if (!shown) recapItems.push({ kind: "recap", recap });
+    }
     const key = `sb-celebrated-${userId}-${challengeId}`;
     let seen: { jokers: number; badges: string[] } | null = null;
     try { seen = JSON.parse(localStorage.getItem(key) ?? "null"); } catch {}
     const now = { jokers: jokers.earnedTotal, badges: badges.map((b) => b.id) };
     try { localStorage.setItem(key, JSON.stringify(now)); } catch {}
-    if (!seen) return;
-    const items: Item[] = [];
+    if (!seen) { if (recapItems.length) setQueue(recapItems); return; }
+    const items: Item[] = [...recapItems];
     if (jokers.enabled && jokers.earnedTotal > seen.jokers) items.push({ kind: "joker", count: jokers.earnedTotal - seen.jokers });
     for (const b of badges) if (!seen.badges.includes(b.id)) items.push({ kind: "badge", ...b });
     if (items.length) setQueue(items);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, challengeId, jokers.earnedTotal, badges.map((b) => b.id).join(",")]);
+  }, [userId, challengeId, jokers.earnedTotal, badges.map((b) => b.id).join(","), recap?.week]);
 
   return <CelebrationQueue queue={queue} setQueue={setQueue} jokers={jokers} />;
 }
@@ -153,14 +254,17 @@ function CelebrationQueue({ queue, setQueue, jokers }: {
   jokers: { held: number; max: number; every: number };
 }) {
   const current = queue[0];
-  useEffect(() => { if (current) burst(); }, [current]);
+  useEffect(() => { if (current && (current.kind !== "recap" || current.recap.passed)) burst(); }, [current]);
   const next = () => setQueue((q) => q.slice(1));
 
   return (
     <AnimatePresence>
       {current && (
-        <Dialog key={current.kind === "joker" ? "joker" : current.id} onClose={next} label={current.kind === "joker" ? "Du sparte en joker" : `Nytt merke: ${current.title}`}>
-          {current.kind === "joker" ? (
+        <Dialog key={current.kind === "recap" ? `recap-${current.recap.week}` : current.kind === "joker" ? "joker" : current.id} onClose={next}
+          label={current.kind === "recap" ? `Din uke ${current.recap.weekNo}` : current.kind === "joker" ? "Du sparte en joker" : `Nytt merke: ${current.title}`}>
+          {current.kind === "recap" ? (
+            <RecapCard recap={current.recap} onNext={next} />
+          ) : current.kind === "joker" ? (
             <>
               <Spin><JokerCard /></Spin>
               <div className="card w-full p-5 text-center">
@@ -187,11 +291,26 @@ function CelebrationQueue({ queue, setQueue, jokers }: {
   );
 }
 
+const SAMPLE_RECAP: WeekRecap = {
+  week: "2026-10-26", weekNo: 44, range: "26. okt.–1. nov.", passed: true, fined: false, penaltyKr: 50, credits: 4, needed: 3,
+  jokersUsed: 0, task: { title: "Én økt utendørs", met: true }, sessions: 4, minutes: 205, km: 18.4, elevation: 240, longest: 72,
+  topSport: "Løping", prev: { sessions: 3, minutes: 150 }, rank: 2, people: 6, first: false, streak: 3,
+  family: { made: 5, total: 6, sessions: 21, minutes: 1260, km: 64 }, weeksLeft: 7,
+  message: "🔥 3 uker på rad! Du er rett og slett umulig å stoppe.",
+};
+const SAMPLE_MISSED: WeekRecap = {
+  ...SAMPLE_RECAP, passed: false, fined: true, credits: 2, sessions: 2, minutes: 80, km: 6.1, elevation: 40, longest: 45,
+  prev: { sessions: 3, minutes: 150 }, rank: 5, streak: 0, first: false,
+  message: "Bare én økt unna! Ny uke, blanke ark – denne tar du.",
+};
+
 /** Admin: show the celebrations on demand, to see (or show off) how they look. */
 export function CelebrationPreview({ jokers }: { jokers: { held: number; max: number; every: number } }) {
   const [queue, setQueue] = useState<Item[]>([]);
   return (
     <div className="flex flex-wrap gap-2">
+      <button type="button" className="btn btn-ghost btn-sm" onClick={() => setQueue([{ kind: "recap", recap: SAMPLE_RECAP }])}>📊 Ukesoppsummering</button>
+      <button type="button" className="btn btn-ghost btn-sm" onClick={() => setQueue([{ kind: "recap", recap: SAMPLE_MISSED }])}>📉 Uke uten mål</button>
       <button type="button" className="btn btn-ghost btn-sm" onClick={() => setQueue([{ kind: "joker", count: 1 }])}>🃏 Ny joker</button>
       <button type="button" className="btn btn-ghost btn-sm" onClick={() => setQueue([{ kind: "badge", id: "preview", title: "Morgenfugl", emoji: "🌅", how: "5 økter startet før kl. 7" }])}>🏅 Nytt merke</button>
       <CelebrationQueue queue={queue} setQueue={setQueue} jokers={jokers} />

@@ -342,7 +342,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
             <>
               <section className="card space-y-2 p-4">
                 <h2 className="font-bold">Forhåndsvis feiringer</h2>
-                <p className="text-sm text-muted">Slik ser det ut når noen sparer en joker eller får et nytt merke.</p>
+                <p className="text-sm text-muted">Slik ser det ut når uka er over (vises én gang, første gang de åpner appen etter søndag), når noen sparer en joker eller får et nytt merke.</p>
                 <CelebrationPreview jokers={{ held: 1, max: c.joker_max, every: c.joker_every ?? 1 }} />
               </section>
               <section className="card space-y-2 p-4">
