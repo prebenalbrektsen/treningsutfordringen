@@ -97,8 +97,10 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   const allUsers = await query<{ id: number; name: string; email: string | null; invite_token: string | null; is_admin: boolean; strava: boolean; approved: boolean; created_at: Date; activated: boolean }>(
     "select id, name, email, invite_token, is_admin, strava_athlete_id is not null as strava, approved, created_at, password_hash is not null as activated from users order by name",
   );
-  // Connected to Strava before the consent page existed, and not chosen yet.
-  const undecided = await query<{ name: string }>("select name from users where strava_athlete_id is not null and strava_consent_at is null and approved order by name");
+  // Haven't done the one-time setup (notifications + Strava sharing) yet.
+  const undecided = await query<{ name: string }>(
+    "select name from users where approved and (setup_done_at is null or (strava_athlete_id is not null and strava_consent_at is null)) order by name",
+  );
   const users = allUsers.filter((u) => u.approved);
   const pending = allUsers.filter((u) => !u.approved);
   const groupToken = (await query<{ value: string }>("select value from settings where key = 'group_invite'"))[0]?.value ?? null;
@@ -283,9 +285,9 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
 
           {tab === "deltakere" && undecided.length > 0 && (
             <section className="card space-y-2 p-4">
-              <h2 className="font-bold">Strava-deling: {undecided.length} har ikke valgt ennå</h2>
+              <h2 className="font-bold">Oppsett: {undecided.length} har ikke valgt varsler og Strava-deling ennå</h2>
               <p className="text-sm text-muted">
-                {undecided.map((u) => u.name).join(", ")}. De får valget neste gang de åpner appen. Til de har valgt (senest {formatDay(UNDECIDED_SHARE_UNTIL)}) vises øktene deres som før.
+                {undecided.map((u) => u.name).join(", ")}. De får oppsettet neste gang de åpner appen. Til de har valgt (senest {formatDay(UNDECIDED_SHARE_UNTIL)}) vises Strava-øktene deres som før.
               </p>
               <form action={remindStravaChoice}><button className="btn btn-ghost btn-sm">🔔 Send dem en påminnelse</button></form>
             </section>

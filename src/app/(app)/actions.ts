@@ -550,15 +550,17 @@ export async function adminSyncStrava(userId: number): Promise<void> {
   revalidatePath("/admin");
 }
 
-/** Admin: a push to everyone with Strava connected who hasn't chosen what the group sees yet. */
+/** Admin: a push to everyone who hasn't done the one-time setup (notifications + Strava sharing). */
 export async function remindStravaChoice(): Promise<void> {
   await requireAdmin();
-  const undecided = await query<{ id: number }>("select id from users where strava_athlete_id is not null and strava_consent_at is null and approved");
+  const undecided = await query<{ id: number }>(
+    "select id from users where approved and (setup_done_at is null or (strava_athlete_id is not null and strava_consent_at is null))",
+  );
   await push(undecided.map((u) => u.id), "test", {
-    title: "Velg hva gruppa ser fra Strava",
-    body: "Strava krever at du velger hva som deles av øktene dine. Det tar ti sekunder – til da vises de som før.",
-    url: "/strava-deling",
-    tag: "strava-deling",
+    title: "Et lite oppsett i Treningsutfordring",
+    body: "Velg varsler og hva gruppa ser fra Strava. Det tar ti sekunder – til da er alt som før.",
+    url: "/oppsett",
+    tag: "oppsett",
   });
   revalidatePath("/admin");
 }

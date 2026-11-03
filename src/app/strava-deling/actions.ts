@@ -14,7 +14,7 @@ export async function saveSharing(form: FormData): Promise<void> {
   const ticks = SHARE_OPTIONS.map((o) => form.get(o.key) === "on");
   await query(
     `update users set strava_consent_at = coalesce(strava_consent_at, now()),
-            share_distance = $2, share_elevation = $3, share_hr = $4, share_title = $5 where id = $1`,
+            share_distance = $2, share_elevation = $3, share_hr = $4, share_title = $5, setup_done_at = coalesce(setup_done_at, now()) where id = $1`,
     [user.id, ...ticks],
   );
   revalidatePath("/", "layout");
@@ -25,7 +25,7 @@ export async function saveSharing(form: FormData): Promise<void> {
 export async function declineSharing(): Promise<void> {
   const user = await requireUser();
   await disconnectStrava(user.id);
-  await query("update users set strava_consent_at = null where id = $1", [user.id]);
+  await query("update users set strava_consent_at = null, setup_done_at = coalesce(setup_done_at, now()) where id = $1", [user.id]);
   revalidatePath("/", "layout");
   redirect("/meg?strava=frakoblet");
 }

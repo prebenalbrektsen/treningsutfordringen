@@ -17,6 +17,7 @@ export type User = {
   approved: boolean;
   strava_synced_at: Date | null;
   strava_consent_at: Date | null;
+  setup_done_at: Date | null;
   share_distance: boolean;
   share_elevation: boolean;
   share_hr: boolean;
@@ -60,7 +61,7 @@ export async function currentUser(): Promise<User | null> {
   if (!token) return null;
   return one<User>(
     `select u.id, u.name, u.email, u.is_admin, u.color, u.strava_athlete_id, u.strava_synced_at, u.approved,
-            u.strava_consent_at, u.share_distance, u.share_elevation, u.share_hr, u.share_title
+            u.strava_consent_at, u.setup_done_at, u.share_distance, u.share_elevation, u.share_hr, u.share_title
        from sessions s join users u on u.id = s.user_id
       where s.token = $1 and s.expires_at > now()`,
     [token],

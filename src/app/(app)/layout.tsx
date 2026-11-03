@@ -12,8 +12,9 @@ import { badgesFor } from "@/lib/badges";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
-  // Connected before consent existed: ask once (Strava's terms), else they're disconnected.
-  if (user.strava_athlete_id && !user.strava_consent_at) redirect("/strava-deling");
+  // Joined before the setup existed (notifications + Strava sharing), or connected Strava without
+  // consent: the one-time setup first.
+  if (!user.setup_done_at || (user.strava_athlete_id && !user.strava_consent_at)) redirect("/oppsett");
   // Keep everyone's Strava workouts fresh without anybody pressing a button.
   after(async () => {
     await syncStale();
