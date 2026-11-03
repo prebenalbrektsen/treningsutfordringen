@@ -11,7 +11,14 @@ export type User = {
   id: number;
   name: string;
   email: string | null;
+  /** Admin of the group being viewed (the group's own title for it, e.g. «Kontrollør», is admin_title). */
   is_admin: boolean;
+  /** Owner of the whole app: creates group invitations, sees every group. */
+  is_sysadmin: boolean;
+  /** The group being viewed (null = not in any group yet). */
+  group_id: number | null;
+  group_name: string | null;
+  admin_title: string;
   color: string;
   strava_athlete_id: string | null;
   approved: boolean;
@@ -59,24 +66,43 @@ export async function endSession(): Promise<void> {
 export async function currentUser(): Promise<User | null> {
   const token = (await cookies()).get(COOKIE)?.value;
   if (!token) return null;
+  // Admin and approved are per group: they come from the membership of the group being viewed
+  // (the chosen one, else the first the person joined). A disabled group isn't shown.
   return one<User>(
-    `select u.id, u.name, u.email, u.is_admin, u.color, u.strava_athlete_id, u.strava_synced_at, u.approved,
-            u.strava_consent_at, u.setup_done_at, u.share_distance, u.share_elevation, u.share_hr, u.share_title
+    `select u.id, u.name, u.email, u.color, u.strava_athlete_id, u.strava_synced_at, u.is_sysadmin,
+            u.strava_consent_at, u.setup_done_at, u.share_distance, u.share_elevation, u.share_hr, u.share_title,
+            g.id as group_id, g.name as group_name, coalesce(g.admin_title, 'Kontrolløren') as admin_title,
+            coalesce(gm.role = 'admin', false) as is_admin, coalesce(gm.approved, false) as approved
        from sessions s join users u on u.id = s.user_id
+       left join lateral (
+         select m.* from group_members m join groups gg on gg.id = m.group_id and gg.disabled_at is null
+          where m.user_id = u.id order by (m.group_id = u.current_group_id) desc, m.joined_at limit 1
+       ) gm on true
+       left join groups g on g.id = gm.group_id
       where s.token = $1 and s.expires_at > now()`,
     [token],
   );
 }
 
-export async function requireUser(): Promise<User> {
+export async function requireUser(): Promise<User & { group_id: number }> {
   const user = await currentUser();
   if (!user) redirect("/login");
-  // Joined through the shared family link and not approved yet: only the waiting room.
+  // Not in any group (e.g. just signed up through a group invitation): start one, or wait.
+  if (!user.group_id) redirect("/ny-gruppe");
+  // Joined through a group's shared link and not approved yet: only the waiting room.
   if (!user.approved) redirect("/venter");
+  return user as User & { group_id: number };
+}
+
+/** The app owner: group invitations and an overview of every group. */
+export async function requireSysadmin(): Promise<User> {
+  const user = await currentUser();
+  if (!user) redirect("/login");
+  if (!user.is_sysadmin) redirect("/");
   return user;
 }
 
-export async function requireAdmin(): Promise<User> {
+export async function requireAdmin(): Promise<User & { group_id: number }> {
   const user = await requireUser();
   if (!user.is_admin) redirect("/");
   return user;

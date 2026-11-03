@@ -1,7 +1,7 @@
-import { activeChallenge, checkInDeadline, loadBoard, evaluateWeek, firstCountedWeek, WORKOUT_COLUMNS, type WeeklyTask, type Workout } from "@/lib/challenge";
+import { activeChallenge, applyVerdicts, checkInDeadline, loadBoard, evaluateWeek, firstCountedWeek, WORKOUT_COLUMNS, type WeeklyTask, type Workout } from "@/lib/challenge";
 import { query } from "@/lib/db";
 import { movedNotice } from "@/lib/moved";
-import { everyoneBut, once, push } from "@/lib/push";
+import { everyone, once, push } from "@/lib/push";
 import { sportLabel } from "@/lib/sports";
 import { addDays, mondayOf, osloDate } from "@/lib/time";
 
@@ -21,17 +21,25 @@ export async function GET(request: Request) {
   await query("delete from strava_events where created_at < now() - interval '30 days'");
   // One-time heads-up about the new address (see lib/moved.ts), sent to every phone, whatever its settings.
   if (movedNotice() && (await once("moved:treningsutfordring"))) {
-    await push(await everyoneBut(null), "test", {
+    await push(await everyone(), "test", {
       title: "📣 Ny adresse: treningsutfordring.vercel.app",
       body: "Appen heter nå Treningsutfordring. Logg inn med passord, og legg appen på hjemskjermen på nytt.",
       url: "/login",
       tag: "moved",
     });
   }
-  const c = await activeChallenge();
-  if (!c) return Response.json({ skipped: "ingen utfordring" });
+  // Each group runs its own challenge; reminders go out per group.
+  let sent = 0;
+  const groups = await query<{ id: number }>("select id from groups where disabled_at is null");
+  for (const g of groups) sent += await remindGroup(g.id);
+  return Response.json({ sent });
+}
+
+async function remindGroup(groupId: number): Promise<number> {
+  const c = await activeChallenge(groupId);
+  if (!c) return 0;
   const today = osloDate();
-  if (today < c.starts_on || today > c.ends_on) return Response.json({ skipped: "utenfor perioden" });
+  if (today < c.starts_on || today > c.ends_on) return 0;
 
   const week = mondayOf(today);
   const members = await query<{ user_id: number; joined_at: Date }>("select user_id, joined_at from challenge_members where challenge_id = $1", [c.id]);
@@ -41,6 +49,7 @@ export async function GET(request: Request) {
       where user_id = any($1::int[]) and started_at >= ($2::date)::timestamp at time zone 'Europe/Oslo'`,
     [ids, addDays(week, -1)],
   );
+  await applyVerdicts(groupId, workouts);
   const task = (await query<WeeklyTask>("select id, week_start, title, description, auto_sports from weekly_tasks where challenge_id = $1 and week_start = $2", [c.id, week]))[0];
   let sent = 0;
 
@@ -76,5 +85,5 @@ export async function GET(request: Request) {
       sent++;
     }
   }
-  return Response.json({ sent });
+  return sent;
 }

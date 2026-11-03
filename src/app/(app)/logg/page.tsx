@@ -15,7 +15,7 @@ import { addDays, ago, mondayOf, osloDate, toOsloLocalInput } from "@/lib/time";
 
 export default async function LogPage({ searchParams }: { searchParams: Promise<{ vis?: string }> }) {
   const user = await requireUser();
-  const c = await activeChallenge();
+  const c = await activeChallenge(user.group_id);
   if (!c) return <p className="pt-6 text-muted">Ingen utfordring er i gang.</p>;
   const mineLabel = user.strava_athlete_id ? "Mine" : "Logg ny";
 

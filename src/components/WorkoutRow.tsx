@@ -23,7 +23,7 @@ function StatusPill({ w, c }: { w: Workout; c: Challenge }) {
     case "expired": return pill("bg-line text-muted", "Ikke sjekket inn i tide");
     case "short": return pill("bg-line text-muted", `Under ${c.session_minutes} min – teller ikke`);
     case "sameday": return pill("bg-line text-muted", `Teller ikke – maks ${c.max_per_day} per dag`);
-    case "rejected": return pill("bg-bad-soft text-bad", "Underkjent av kontrolløren");
+    case "rejected": return pill("bg-bad-soft text-bad", "Underkjent – teller ikke");
     default: return null;
   }
 }

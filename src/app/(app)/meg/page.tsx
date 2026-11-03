@@ -42,7 +42,7 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
   const passkeys = await query<{ id: number; name: string; last_used_at: Date | null; created_at: Date }>(
     "select id, name, last_used_at, created_at from passkeys where user_id = $1 order by created_at", [user.id]);
   const avatarV = (await one<{ v: number | null }>("select extract(epoch from avatar_updated_at)::int as v from users where id = $1", [user.id]))!.v;
-  const c = await activeChallenge();
+  const c = await activeChallenge(user.group_id);
   const board = c ? await loadBoard(c, user.id) : null;
   const me = board?.members.find((m) => m.id === user.id);
   const stats = computeStats(me?.workouts ?? []);
@@ -195,6 +195,7 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
         </ActionForm>
       </section>
 
+      {user.is_sysadmin && <p className="text-center text-sm"><Link href="/system" className="font-semibold underline">System – alle grupper</Link></p>}
       <p className="text-center text-sm"><Link href="/personvern" className="font-semibold text-muted underline">Personvern og vilkår</Link></p>
       <form action={logout} className="pb-4 text-center"><button className="text-sm font-semibold text-muted underline">Logg ut</button></form>
     </div>

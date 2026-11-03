@@ -28,14 +28,14 @@ export default async function ToYouPage() {
        select 'kudos' as kind, k.created_at as at, w.id as workout_id, w.sport, w.title, null as body,
               u.id as from_id, u.name, u.color, extract(epoch from u.avatar_updated_at)::int as avatar_v
          from kudos k join workouts w on w.id = k.workout_id join users u on u.id = k.user_id
-        where w.user_id = $1 and k.user_id <> $1
+        where w.user_id = $1 and k.user_id <> $1 and k.group_id = $2
        union all
        select 'comment', m.created_at, w.id, w.sport, w.title, m.body,
               u.id, u.name, u.color, extract(epoch from u.avatar_updated_at)::int
          from comments m join workouts w on w.id = m.workout_id join users u on u.id = m.user_id
-        where w.user_id = $1 and m.user_id <> $1
+        where w.user_id = $1 and m.user_id <> $1 and m.group_id = $2
      ) x order by at desc limit 60`,
-    [user.id],
+    [user.id, user.group_id],
   );
   await query("update users set activity_seen_at = now() where id = $1", [user.id]);
 

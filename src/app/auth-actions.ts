@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { admins, push } from "@/lib/push";
-import { checkPassword, endSession, hashPassword, startSession } from "@/lib/auth";
+import { checkPassword, currentUser, endSession, hashPassword, startSession } from "@/lib/auth";
 import { one, query } from "@/lib/db";
 
 export type FormState = { error?: string } | undefined;
@@ -19,20 +19,21 @@ export async function login(_: FormState, form: FormData): Promise<FormState> {
   redirect("/");
 }
 
-/** First run only: the very first account becomes the admin. */
+/** First run only: the very first account becomes the system admin. */
 export async function setupAdmin(_: FormState, form: FormData): Promise<FormState> {
   const name = String(form.get("name") ?? "").trim();
   const email = String(form.get("email") ?? "").trim().toLowerCase();
   const password = String(form.get("password") ?? "");
   if (!name || !email || password.length < 8) return { error: "Fyll inn navn, e-post og et passord på minst 8 tegn." };
+  // The very first account owns the app (system admin) and goes on to start the first group.
   const created = await one<{ id: number }>(
-    `insert into users (name, email, password_hash, is_admin)
-     select $1, $2, $3, true where not exists (select 1 from users) returning id`,
+    `insert into users (name, email, password_hash, is_admin, is_sysadmin)
+     select $1, $2, $3, true, true where not exists (select 1 from users) returning id`,
     [name, email, await hashPassword(password)],
   );
   if (!created) return { error: "Appen er allerede satt opp. Logg inn i stedet." };
   await startSession(created.id);
-  redirect("/admin");
+  redirect("/ny-gruppe");
 }
 
 export async function acceptInvite(_: FormState, form: FormData): Promise<FormState> {
@@ -60,23 +61,36 @@ export async function hasUsers(): Promise<boolean> {
   return (await query("select 1 from users limit 1")).length > 0;
 }
 
-/** Shared family link: anyone with it can ask to join; the admin approves them before they get in. */
+/** A group's shared link: anyone with it can ask to join; the group's admin approves them first. */
 export async function joinViaGroupLink(_: FormState, form: FormData): Promise<FormState> {
   const token = String(form.get("token") ?? "");
-  const valid = await one("select 1 from settings where key = 'group_invite' and value = $1", [token]);
-  if (!token || !valid) return { error: "Lenken er ikke lenger i bruk. Be kontrolløren om en ny." };
+  const group = token ? await one<{ id: number; name: string }>("select id, name from groups where join_token = $1 and disabled_at is null", [token]) : null;
+  if (!group) return { error: "Lenken er ikke lenger i bruk. Be om en ny." };
   const name = String(form.get("name") ?? "").trim().slice(0, 40);
   const email = String(form.get("email") ?? "").trim().toLowerCase();
   const password = String(form.get("password") ?? "");
   if (!name || !email || password.length < 8) return { error: "Fyll inn navn, e-post og et passord på minst 8 tegn." };
-  if (await one("select 1 from users where lower(email) = $1", [email])) return { error: "Den e-posten er allerede i bruk. Logg inn i stedet." };
+  if (await one("select 1 from users where lower(email) = $1", [email])) return { error: "Du har allerede en konto. Logg inn, og åpne lenken på nytt – da kan du bli med med samme konto." };
   const colors = ["#e4572e", "#2e86ab", "#7a9e3e", "#a23b72", "#f18f01", "#3b1f2b", "#0f7173", "#c73e1d", "#6a4c93", "#1982c4"];
   const count = await one<{ n: number }>("select count(*)::int as n from users");
   const user = await one<{ id: number }>(
-    "insert into users (name, email, password_hash, color, approved) values ($1, $2, $3, $4, false) returning id",
-    [name, email, await hashPassword(password), colors[count!.n % colors.length]],
+    "insert into users (name, email, password_hash, color, current_group_id) values ($1, $2, $3, $4, $5) returning id",
+    [name, email, await hashPassword(password), colors[count!.n % colors.length], group.id],
   );
+  await query("insert into group_members (group_id, user_id, approved) values ($1, $2, false)", [group.id, user!.id]);
   await startSession(user!.id);
-  after(async () => push(await admins(), "admin", { title: "👋 Ny deltaker venter", body: `${name} vil bli med i Treningsutfordring`, url: "/admin?fane=deltakere" }));
+  after(async () => push(await admins(group.id), "admin", { title: "👋 Ny deltaker venter", body: `${name} vil bli med i ${group.name}`, url: "/admin?fane=deltakere" }));
+  redirect("/venter");
+}
+
+/** Already has an account (e.g. in another group): ask to join this group too. */
+export async function joinGroupAsMe(token: string): Promise<void> {
+  const me = await currentUser();
+  if (!me) redirect("/login");
+  const group = await one<{ id: number; name: string }>("select id, name from groups where join_token = $1 and disabled_at is null", [token]);
+  if (!group) redirect("/");
+  const added = await query("insert into group_members (group_id, user_id, approved) values ($1, $2, false) on conflict do nothing returning 1", [group.id, me.id]);
+  await query("update users set current_group_id = $2 where id = $1", [me.id, group.id]);
+  if (added.length) after(async () => push(await admins(group.id), "admin", { title: "👋 Ny deltaker venter", body: `${me.name} vil bli med i ${group.name}`, url: "/admin?fane=deltakere" }));
   redirect("/venter");
 }

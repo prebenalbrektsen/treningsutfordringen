@@ -12,7 +12,7 @@ import { ActivateWebhook } from "@/components/ActivateWebhook";
 import { UNDECIDED_SHARE_UNTIL } from "@/lib/sharing";
 import { addDays, ago, formatDay, formatWeekRange, isoWeekNumber, mondayOf, osloDate, relativeTime } from "@/lib/time";
 import { sportLabel } from "@/lib/sports";
-import { activateStravaWebhook, adminSyncStrava, approveUser, removeInvite, confirmAllClaimed, createGroupLink, disableGroupLink, remindStravaChoice, savePrivacyContact, rejectUser, deleteTask, newInvite, saveChallenge, saveTask, setFine, settleAll, toggleInvite, toggleMember, countThisWeek } from "../actions";
+import { activateStravaWebhook, adminSyncStrava, approveUser, removeInvite, confirmAllClaimed, createGroupLink, disableGroupLink, remindStravaChoice, saveGroupSettings, rejectUser, deleteTask, newInvite, saveChallenge, saveTask, setFine, settleAll, toggleInvite, toggleMember, countThisWeek } from "../actions";
 
 const TABS = [
   { id: "boter", label: "Bøter" },
@@ -90,21 +90,25 @@ function ChallengeFields({ c }: { c?: Challenge }) {
   );
 }
 
-export default async function AdminPage({ searchParams }: { searchParams: Promise<{ fane?: string }> }) {
+export default async function AdminPage({ searchParams }: { searchParams: Promise<{ fane?: string; ny?: string }> }) {
   const user = await requireAdmin();
-  const c = await activeChallenge();
+  const c = await activeChallenge(user.group_id);
   const board = c ? await loadBoard(c, user.id) : null;
   const allUsers = await query<{ id: number; name: string; email: string | null; invite_token: string | null; is_admin: boolean; strava: boolean; approved: boolean; created_at: Date; activated: boolean }>(
-    "select id, name, email, invite_token, is_admin, strava_athlete_id is not null as strava, approved, created_at, password_hash is not null as activated from users order by name",
+    `select u.id, u.name, u.email, u.invite_token, m.role = 'admin' as is_admin, u.strava_athlete_id is not null as strava, m.approved,
+            m.joined_at as created_at, u.password_hash is not null as activated
+       from group_members m join users u on u.id = m.user_id where m.group_id = $1 order by u.name`,
+    [user.group_id],
   );
-  const privacyContact = (await query<{ value: string }>("select value from settings where key = 'privacy_contact'"))[0]?.value ?? "";
   // Haven't done the one-time setup (notifications + Strava sharing) yet.
   const undecided = await query<{ name: string }>(
-    "select name from users where approved and (setup_done_at is null or (strava_athlete_id is not null and strava_consent_at is null)) order by name",
+    `select u.name from users u join group_members m on m.user_id = u.id and m.group_id = $1 and m.approved
+      where u.setup_done_at is null or (u.strava_athlete_id is not null and u.strava_consent_at is null) order by u.name`,
+    [user.group_id],
   );
   const users = allUsers.filter((u) => u.approved);
   const pending = allUsers.filter((u) => !u.approved);
-  const groupToken = (await query<{ value: string }>("select value from settings where key = 'group_invite'"))[0]?.value ?? null;
+  const groupToken = (await query<{ join_token: string | null }>("select join_token from groups where id = $1", [user.group_id]))[0]?.join_token ?? null;
   const memberIds = new Set(board?.members.map((m) => m.id));
   // Joined mid-week: not counted until next Monday, unless the admin lets this week count.
   const waiting = new Set(board?.members.filter((m) => m.results.find((r) => r.week === board.currentWeek)?.state === "before").map((m) => m.id));
@@ -121,20 +125,22 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   const claimedCount = debtors.reduce((n, d) => n + d.weeks.filter((w) => w.fine === "claimed").length, 0);
   const settled = (board?.members ?? []).flatMap((m) => m.results.filter((r) => r.fine === "paid" || r.fine === "waived" || r.fine === "joker").map((r) => ({ m, r })));
 
-  const { fane } = await searchParams;
+  const { fane, ny } = await searchParams;
   const webhook = fane === "regler" ? await webhookStatus().catch(() => null) : null;
   // Remember it, so the background Strava check can relax (see lib/autosync.ts).
   if (webhook) await query("insert into settings (key, value) values ('strava_webhook', '1') on conflict (key) do nothing");
+  // The app-wide Strava set-up (webhook, event log) is the system admin's; group admins see their own people.
   const connected = users.filter((u) => u.strava).length;
   // Strava troubleshooting: everyone's connection, and the latest notices from Strava.
   const stravaPeople = fane === "regler" ? await query<{ id: number; name: string; connected: boolean; synced: Date | null; last: Date | null; last_sport: string | null }>(
     `select u.id, u.name, u.strava_refresh_token is not null as connected, u.strava_synced_at as synced,
             w.started_at as last, w.sport as last_sport
-       from users u
+       from users u join group_members m on m.user_id = u.id and m.group_id = $1 and m.approved
        left join lateral (select started_at, sport from workouts where user_id = u.id and source = 'strava' order by started_at desc limit 1) w on true
-      where u.approved order by u.name`,
+      order by u.name`,
+    [user.group_id],
   ) : [];
-  const stravaEvents = fane === "regler" ? await query<{ created_at: Date; owner_id: string; name: string | null; aspect: string; result: string }>(
+  const stravaEvents = fane === "regler" && user.is_sysadmin ? await query<{ created_at: Date; owner_id: string; name: string | null; aspect: string; result: string }>(
     `select e.created_at, e.owner_id::text, u.name, e.aspect, e.result from strava_events e left join users u on u.id = e.user_id
       order by e.created_at desc limit 12`,
   ) : [];
@@ -144,8 +150,9 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   const setup = [
     { done: !!c, text: "Opprett en utfordring", href: "?fane=regler" },
     { done: !!c?.vipps_info, text: "Legg inn Vipps-lenken til bøtekassa", href: "?fane=regler" },
-    { done: users.length > 1, text: "Legg til deltakerne og send dem invitasjonen", href: "?fane=deltakere" },
-    { done: stravaConfigured(), text: "Koble appen til Strava (API-nøkler fra strava.com/settings/api)", href: null },
+    { done: users.length > 1, text: "Del invitasjonslenken med gjengen", href: "?fane=deltakere" },
+    // The app's own Strava keys are the system admin's job, not each group's.
+    ...(user.is_sysadmin ? [{ done: stravaConfigured(), text: "Koble appen til Strava (API-nøkler fra strava.com/settings/api)", href: null }] : []),
   ];
 
   return (
@@ -284,6 +291,13 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
             </section>
           )}
 
+          {ny && (
+            <section className="rounded-2xl bg-ok-soft p-4 text-ok">
+              <p className="display text-2xl">{user.group_name} er klar! 🎉</p>
+              <p className="mt-1 text-sm font-semibold">Del lenken under med gjengen – de lager konto selv, og du slipper dem inn her.</p>
+            </section>
+          )}
+
           {tab === "deltakere" && undecided.length > 0 && (
             <section className="card space-y-2 p-4">
               <h2 className="font-bold">Oppsett: {undecided.length} har ikke valgt varsler og Strava-deling ennå</h2>
@@ -297,7 +311,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           {tab === "deltakere" && (
             <section className="card space-y-2 p-4">
               <h2 className="font-bold">Fellesinvitasjon</h2>
-              <p className="text-sm text-muted">Én lenke du kan legge i familiechatten. De som åpner den lager konto selv – og du godkjenner dem her før de kommer inn.</p>
+              <p className="text-sm text-muted">Én lenke du kan legge i gruppechatten. De som åpner den lager konto selv – og du godkjenner dem her før de kommer inn.</p>
               {groupToken ? (
                 <>
                   <p className="truncate rounded-lg bg-line/50 px-3 py-2 text-xs">{appUrl}/bli-med/{groupToken}</p>
@@ -356,13 +370,14 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
 
           {tab === "regler" && (
             <>
-              <section className="card space-y-2 p-4">
-                <h2 className="font-bold">Kontakt for personvern</h2>
-                <p className="text-sm text-muted">Vises i <Link href="/personvern" className="underline">personvernerklæringen</Link> som ansvarlig og kontakt. Tomt = «si fra til Kontrolløren i appen». Strava krever en personvernerklæring, og GDPR at det står hvem som er ansvarlig.</p>
-                <form action={savePrivacyContact} className="flex gap-2">
-                  <input name="contact" defaultValue={privacyContact} placeholder="Navn, e-post" className="field flex-1" />
+              <section className="card space-y-3 p-4">
+                <h2 className="font-bold">Gruppa</h2>
+                <form action={saveGroupSettings} className="space-y-3">
+                  <label className="block"><span className="label">Navn på gruppa</span><input name="name" defaultValue={user.group_name ?? ""} className="field" maxLength={50} required /></label>
+                  <label className="block"><span className="label">Hva du heter som styrer (bestemt form)</span><input name="admin_title" defaultValue={user.admin_title} className="field" maxLength={30} required /></label>
                   <button className="btn btn-sm">Lagre</button>
                 </form>
+                {user.is_sysadmin && <p className="text-sm"><Link href="/system" className="font-semibold underline">System: alle grupper og invitasjoner →</Link></p>}
               </section>
               <section className="card space-y-2 p-4">
                 <h2 className="font-bold">Forhåndsvis feiringer</h2>
@@ -376,14 +391,14 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                 ) : webhook && webhook.callback_url !== webhookUrl() ? (
                   <>
                     <p className="text-sm text-muted">Sanntids-synken går fortsatt til den gamle adressen ({webhook.callback_url.replace(/^https?:\/\//, "").split("/")[0]}), så øktene hentes bare hvert 10. minutt. Flytt den hit, så kommer de inn med en gang igjen.</p>
-                    <ActivateWebhook action={activateStravaWebhook} label="Flytt sanntids-synk til ny adresse" />
+                    {user.is_sysadmin && <ActivateWebhook action={activateStravaWebhook} label="Flytt sanntids-synk til ny adresse" />}
                   </>
                 ) : webhook ? (
                   <p className="text-sm"><strong className="text-ok">✓ Tilkoblet med sanntids-synk.</strong> <span className="text-muted">Nye økter kommer inn sekunder etter at de er lagret på Strava. {connected} {connected === 1 ? "deltaker har" : "deltakere har"} koblet til.</span></p>
                 ) : (
                   <>
                     <p className="text-sm text-muted">Strava er koblet til ({connected} {connected === 1 ? "deltaker" : "deltakere"}), men øktene hentes bare hvert 10. minutt. Slå på sanntids-synk så kommer de inn med en gang.</p>
-                    <ActivateWebhook action={activateStravaWebhook} />
+                    {user.is_sysadmin && <ActivateWebhook action={activateStravaWebhook} />}
                   </>
                 )}
                 {stravaConfigured() && (

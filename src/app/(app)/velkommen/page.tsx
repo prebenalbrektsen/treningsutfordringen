@@ -13,7 +13,7 @@ import { stravaConfigured } from "@/lib/strava";
 /** First stop after accepting an invite: the three things that decide whether the app gets used. */
 export default async function WelcomePage() {
   const user = await requireUser();
-  const c = await activeChallenge();
+  const c = await activeChallenge(user.group_id);
   const membership = c
     ? await one<{ joined: boolean; count: number }>(
         `select exists(select 1 from challenge_members where challenge_id = $1 and user_id = $2) as joined,
@@ -31,7 +31,7 @@ export default async function WelcomePage() {
         <div className="flex items-center gap-3"><span className={step}>1</span><h2 className="font-bold">Bli med i utfordringen</h2></div>
         {c && membership && (membership.joined || (await mayJoin(c, user.id)))
           ? <JoinCard c={c} joined={membership.joined} count={membership.count} />
-          : <p className="text-sm text-muted">{c ? "Kontrolløren velger hvem som er med – du får beskjed i Prat når du kan bli med." : "Ingen utfordring er startet ennå – du får beskjed i Prat."}</p>}
+          : <p className="text-sm text-muted">{c ? `${user.admin_title} velger hvem som er med – du får beskjed i Prat når du kan bli med.` : "Ingen utfordring er startet ennå – du får beskjed i Prat."}</p>}
       </section>
 
       {stravaConfigured() && (

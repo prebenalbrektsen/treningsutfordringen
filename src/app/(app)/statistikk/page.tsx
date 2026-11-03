@@ -13,7 +13,7 @@ import { addDays, isoWeekNumber, osloDate } from "@/lib/time";
 export default async function StatsPage({ searchParams }: { searchParams: Promise<{ tavle?: string; periode?: string }> }) {
   const user = await requireUser();
   const { tavle, periode } = await searchParams;
-  const c = await activeChallenge();
+  const c = await activeChallenge(user.group_id);
   if (!c) return <p className="pt-6 text-muted">Ingen utfordring ennå.</p>;
   const board = await loadBoard(c, user.id);
   const period: Period = periode === "uke" ? "uke" : "alt";

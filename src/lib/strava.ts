@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { announceWeek } from "./announce";
-import { activeChallenge } from "./challenge";
+import { challengeOf } from "./challenge";
 import { push } from "./push";
 import { sportLabel } from "./sports";
 import { one, query } from "./db";
@@ -149,7 +149,7 @@ async function importActivity(userId: number, a: Activity): Promise<boolean> {
   // Fresh workouts only (not the backlog fetched when someone first connects).
   if (Date.now() - new Date(a.start_date).getTime() < 24 * 3600000) {
     // Say what the challenge's rules actually make of it, so a 28-minute run isn't promised to count.
-    const c = await activeChallenge();
+    const c = await challengeOf(userId);
     const body = c && minutes < c.session_minutes
       ? `${minutes} min – kortere enn ${c.session_minutes} min, så den teller ikke i utfordringen.`
       : `${minutes} min – sjekk inn${c && !c.proof_required ? "" : " med bilde"}, så teller den.`;
@@ -202,7 +202,14 @@ async function mergeManualDuplicate(userId: number, stravaWorkoutId: number, sta
      from workouts m where s.id = $1 and m.id = $2`,
     [stravaWorkoutId, manual.id],
   );
-  await query("insert into kudos (workout_id, user_id, created_at) select $1, user_id, created_at from kudos where workout_id = $2 on conflict do nothing", [stravaWorkoutId, manual.id]);
+  await query("insert into kudos (workout_id, user_id, group_id, created_at) select $1, user_id, group_id, created_at from kudos where workout_id = $2 on conflict do nothing", [stravaWorkoutId, manual.id]);
+  // Each group's verdict on the manual one carries over too.
+  await query(
+    `insert into workout_verdicts (workout_id, group_id, rejected, approved_at) select $1, group_id, rejected, approved_at from workout_verdicts where workout_id = $2
+     on conflict (workout_id, group_id) do update set rejected = workout_verdicts.rejected or excluded.rejected,
+       approved_at = coalesce(workout_verdicts.approved_at, excluded.approved_at)`,
+    [stravaWorkoutId, manual.id],
+  );
   await query("update comments set workout_id = $1 where workout_id = $2", [stravaWorkoutId, manual.id]);
   await query("delete from workouts where id = $1", [manual.id]);
 }

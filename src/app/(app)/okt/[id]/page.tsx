@@ -9,7 +9,7 @@ import { CheckIn } from "@/components/CheckIn";
 import { RoleTag } from "@/components/RoleTag";
 import { CommentForm } from "@/components/CommentForm";
 import { requireUser } from "@/lib/auth";
-import { activeChallenge, annotate, checkInDeadline, WORKOUT_COLUMNS, type Workout } from "@/lib/challenge";
+import { activeChallenge, annotate, checkInDeadline, WORKOUT_COLUMNS, type Workout, applyVerdicts } from "@/lib/challenge";
 import { one, query } from "@/lib/db";
 import { sportIcon, sportLabel } from "@/lib/sports";
 import { fmtKm } from "@/lib/stats";
@@ -28,8 +28,11 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
   );
   // Nothing is shared until the owner checks it in, not even by guessing the address.
   if (!row || (!row.checked_in_at && row.user_id !== user.id)) notFound();
+  // Only people in the group you're viewing: someone else's group's workouts aren't yours to see.
+  if (row.user_id !== user.id && !(await one("select 1 from group_members where group_id = $1 and user_id = $2 and approved", [user.group_id, row.user_id]))) notFound();
+  await applyVerdicts(user.group_id, [row]);
   const w = row.user_id === user.id ? row : redact(row, effectivePrefs(row));
-  const c = await activeChallenge();
+  const c = await activeChallenge(user.group_id);
   // The status depends on the person's other workouts that day (one per day counts).
   if (c) {
     const week = await query<Workout>(
@@ -37,15 +40,20 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
          and started_at >= ($2::date)::timestamp at time zone 'Europe/Oslo' and started_at < ($2::date + 7)::timestamp at time zone 'Europe/Oslo'`,
       [w.user_id, mondayOf(osloDate(new Date(w.started_at)))],
     );
+    await applyVerdicts(user.group_id, week);
     w.status = annotate(c, week).find((x) => x.id === w.id)?.status;
   }
   const [comments, kudosNames] = await Promise.all([
     query<{ id: number; user_id: number; name: string; color: string; avatar_v: number | null; is_admin: boolean; body: string; created_at: Date }>(
-      "select c.id, c.user_id, u.name, u.color, extract(epoch from u.avatar_updated_at)::int as avatar_v, u.is_admin, c.body, c.created_at from comments c join users u on u.id = c.user_id where c.workout_id = $1 order by c.created_at",
-      [w.id],
+      `select c.id, c.user_id, u.name, u.color, extract(epoch from u.avatar_updated_at)::int as avatar_v, gm.role = 'admin' as is_admin, c.body, c.created_at
+         from comments c join users u on u.id = c.user_id left join group_members gm on gm.group_id = c.group_id and gm.user_id = c.user_id
+        where c.workout_id = $1 and c.group_id = $2 order by c.created_at`,
+      [w.id, user.group_id],
     ),
-    query<{ name: string }>("select u.name from kudos k join users u on u.id = k.user_id where k.workout_id = $1 order by k.created_at", [w.id]),
+    query<{ name: string; user_id: number }>("select u.name, k.user_id from kudos k join users u on u.id = k.user_id where k.workout_id = $1 and k.group_id = $2 order by k.created_at", [w.id, user.group_id]),
   ]);
+  w.kudos_by = kudosNames.map((k) => k.user_id);
+  w.comment_count = comments.length;
   const mine = w.user_id === user.id;
   const facts = [
     ["Varighet", formatMinutes(w.duration_min)],
@@ -74,7 +82,7 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
               expired: "Ikke sjekket inn i tide – teller ikke",
               short: `Under ${c.session_minutes} min – teller ikke som ukeøkt`,
               sameday: `Teller ikke – maks ${c.max_per_day} økt${c.max_per_day === 1 ? "" : "er"} per dag`,
-              rejected: "Underkjent av kontrolløren – teller ikke",
+              rejected: `Underkjent av ${user.admin_title} – teller ikke`,
             }[w.status]}
           </p>
           {w.status === "pending" && mine && <p className="mt-1 text-sm">{c.proof_required ? "Legg ved et bilde for å sjekke inn." : "Trykk «Sjekk inn» så teller den."}</p>}
@@ -114,7 +122,7 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
             <li key={cm.id} className="flex gap-2.5 text-sm">
               <Avatar p={{ id: cm.user_id, name: cm.name, color: cm.color, avatar_v: cm.avatar_v }} size={28} />
               <div className="min-w-0 flex-1">
-              <span className="font-bold" style={{ color: cm.color }}>{cm.name}</span>{cm.is_admin && <> <RoleTag /></>}{" "}
+              <span className="font-bold" style={{ color: cm.color }}>{cm.name}</span>{cm.is_admin && <> <RoleTag title={user.admin_title} /></>}{" "}
               <span className="text-xs text-muted">{ago(new Date(cm.created_at))}</span>
               <p className="whitespace-pre-wrap">{cm.body}</p>
               {(cm.user_id === user.id || user.is_admin) && (

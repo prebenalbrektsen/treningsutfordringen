@@ -19,15 +19,16 @@ import { formatDay, isoWeekNumber, mondayOf, osloDate } from "@/lib/time";
 export default async function PersonPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
   const { id } = await params;
-  const c = await activeChallenge();
+  const c = await activeChallenge(user.group_id);
   const board = c ? await loadBoard(c, user.id) : null;
   const p = board?.members.find((m) => m.id === Number(id));
 
   // In the app but not in this challenge: a simple card instead of a 404.
   if (!c || !board || !p) {
     const u = await one<{ id: number; name: string; color: string; is_admin: boolean; avatar_v: number | null }>(
-      "select id, name, color, is_admin, extract(epoch from avatar_updated_at)::int as avatar_v from users where id = $1 and approved",
-      [Number(id)],
+      `select u.id, u.name, u.color, m.role = 'admin' as is_admin, extract(epoch from u.avatar_updated_at)::int as avatar_v
+         from users u join group_members m on m.user_id = u.id and m.group_id = $2 and m.approved where u.id = $1`,
+      [Number(id), user.group_id],
     );
     if (!u) notFound();
     return (
@@ -37,7 +38,7 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
           <Avatar p={u} size={64} />
           <div className="min-w-0">
             <h1 className="display line-clamp-2 text-4xl break-words">{u.name}</h1>
-            {u.is_admin && <RoleTag />}
+            {u.is_admin && <RoleTag title={user.admin_title} />}
           </div>
         </div>
         <p className="card p-4 text-sm text-muted">{u.name.split(" ")[0]} er ikke med i {c?.name ?? "noen utfordring"} ennå.</p>
@@ -62,7 +63,7 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
         <div className="min-w-0">
           <h1 className="display line-clamp-2 text-4xl break-words sm:text-5xl">{p.name}</h1>
           <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs font-semibold">
-            {p.is_admin && <RoleTag />}
+            {p.is_admin && <RoleTag title={user.admin_title} />}
             <span className="rounded-full bg-line/70 px-2 py-0.5">Med siden {formatDay(osloDate(new Date(p.joined_at)) < c.starts_on ? c.starts_on : osloDate(new Date(p.joined_at)))}</span>
             {p.strava_athlete_id && <span className="rounded-full bg-[#FC5200]/15 px-2 py-0.5 text-[#c2410c]">På Strava</span>}
           </div>

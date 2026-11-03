@@ -10,7 +10,7 @@ export const CATEGORIES = {
   chat: "Nye meldinger i Prat",
   checkin: "Økter som venter på innsjekk",
   reminders: "Påminnelse når uka holder på å glippe",
-  admin: "Til kontrolløren: nye deltakere og meldte betalinger",
+  admin: "Til deg som styrer gruppa: nye deltakere og meldte betalinger",
 } as const;
 type Category = keyof typeof CATEGORIES;
 
@@ -34,7 +34,7 @@ export async function push(userIds: number[], category: Category | "test", paylo
   try {
     const subs = await query<{ id: number; endpoint: string; p256dh: string; auth: string }>(
       `select s.id, s.endpoint, s.p256dh, s.auth from push_subscriptions s join users u on u.id = s.user_id
-        where s.user_id = any($1::int[]) and u.approved and ($2 = 'test' or coalesce((u.notify ->> $2)::boolean, true))`,
+        where s.user_id = any($1::int[]) and ($2 = 'test' or coalesce((u.notify ->> $2)::boolean, true))`,
       [userIds, category],
     );
     if (!subs.length) return;
@@ -57,14 +57,23 @@ export async function push(userIds: number[], category: Category | "test", paylo
   }
 }
 
-/** Everyone approved in the app, except one person (the sender). */
-export async function everyoneBut(userId: number | null): Promise<number[]> {
-  const rows = await query<{ id: number }>("select id from users where approved and id is distinct from $1", [userId]);
+/** Everyone approved in a group, except one person (the sender). */
+export async function everyoneBut(groupId: number, userId: number | null): Promise<number[]> {
+  const rows = await query<{ id: number }>(
+    "select user_id as id from group_members where group_id = $1 and approved and user_id is distinct from $2",
+    [groupId, userId],
+  );
   return rows.map((r) => r.id);
 }
 
-export async function admins(): Promise<number[]> {
-  return (await query<{ id: number }>("select id from users where is_admin")).map((r) => r.id);
+/** The group's admins (Kontrollør or whatever the group calls it). */
+export async function admins(groupId: number): Promise<number[]> {
+  return (await query<{ id: number }>("select user_id as id from group_members where group_id = $1 and role = 'admin'", [groupId])).map((r) => r.id);
+}
+
+/** Every phone in the app, whatever group – only for app-wide notices from the system admin. */
+export async function everyone(): Promise<number[]> {
+  return (await query<{ id: number }>("select distinct user_id as id from group_members where approved")).map((r) => r.id);
 }
 
 /** For scheduled reminders: true the first time a key is seen, false after that. */

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { Logo } from "@/components/Logo";
+import { GroupSwitcher } from "@/components/GroupSwitcher";
 import { NavLinks } from "@/components/NavLinks";
 import { requireUser } from "@/lib/auth";
 import { announceWeekSummary } from "@/lib/announce";
@@ -26,7 +27,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="mx-auto min-h-dvh max-w-3xl pb-[calc(104px+env(safe-area-inset-bottom))] sm:pb-10">
       <header className="flex items-center justify-between px-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-6 sm:pt-6 sm:pb-8">
-        <Link href="/"><Logo /></Link>
+        <div className="flex min-w-0 items-center gap-3">
+          <Link href="/"><Logo /></Link>
+          <GroupSwitcher userId={user.id} current={user.group_id} />
+        </div>
         <div className="hidden sm:block"><NavLinks isAdmin={user.is_admin} badges={badges} onStrava={!!user.strava_athlete_id} avatar={avatar} /></div>
       </header>
       <main className="px-4">{children}</main>

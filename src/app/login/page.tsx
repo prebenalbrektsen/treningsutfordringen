@@ -54,7 +54,7 @@ export default async function LoginPage() {
           />
           </>
         )}
-        {!firstRun && <p className="mt-4 text-center text-sm text-muted">Glemt passordet? Be kontrolløren om en ny innloggingslenke.</p>}
+        {!firstRun && <p className="mt-4 text-center text-sm text-muted">Glemt passordet? Be den som styrer gruppa om en ny innloggingslenke.</p>}
         <p className="mt-6 text-center text-xs"><a href="/personvern" className="text-muted underline">Personvern og vilkår</a></p>
       </div>
     </main>

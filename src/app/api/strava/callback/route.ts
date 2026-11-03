@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { currentUser } from "@/lib/auth";
-import { activeChallenge } from "@/lib/challenge";
+import { syncStartFor } from "@/lib/challenge";
 import { one } from "@/lib/db";
 import { connectStrava, syncStrava } from "@/lib/strava";
 import { addDays, osloDate } from "@/lib/time";
@@ -33,8 +33,7 @@ export async function GET(request: Request) {
 
   try {
     await connectStrava(ticket.user_id, code);
-    const c = await activeChallenge();
-    await syncStrava(ticket.user_id, new Date(`${c ? addDays(c.starts_on, -7) : osloDate()}T00:00:00Z`));
+    await syncStrava(ticket.user_id, await syncStartFor(ticket.user_id));
   } catch (e) {
     console.error("[strava callback]", e);
     return fail("feil", "Noe gikk galt hos Strava. Prøv igjen om litt.");

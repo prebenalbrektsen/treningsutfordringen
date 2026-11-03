@@ -9,7 +9,7 @@ export async function GET(request: Request) {
   const what = new URL(request.url).searchParams.get("hva");
   let tag = "";
   if (what === "prat") {
-    const row = await one<{ tag: string }>("select coalesce(max(id), 0) || ':' || count(*) as tag from messages");
+    const row = await one<{ tag: string }>("select coalesce(max(id), 0) || ':' || count(*) as tag from messages where group_id = $1", [user.group_id]);
     tag = row!.tag;
   } else if (what === "godkjent") {
     tag = user.approved ? "ja" : "nei";

@@ -36,10 +36,10 @@ export async function personStats(c: Challenge, board: Board, period: Period): P
   const inPeriod = (w: Workout) => period === "alt" || mondayOf(osloDate(new Date(w.started_at))) === week;
   const given = await query<{ user_id: number; n: number }>(
     `select k.user_id, count(*)::int as n from kudos k join workouts w on w.id = k.workout_id
-      where w.started_at >= ($1::date)::timestamp at time zone 'Europe/Oslo'
+      where k.group_id = $3 and w.started_at >= ($1::date)::timestamp at time zone 'Europe/Oslo'
         and w.started_at < ($2::date + 1)::timestamp at time zone 'Europe/Oslo'
       group by k.user_id`,
-    [period === "alt" ? board.weeks[0] : week, period === "alt" ? c.ends_on : addDays(week, 6)],
+    [period === "alt" ? board.weeks[0] : week, period === "alt" ? c.ends_on : addDays(week, 6), c.group_id],
   );
   const givenBy = new Map(given.map((g) => [g.user_id, g.n]));
   return board.members.map((m) => {
@@ -124,8 +124,8 @@ export function rank(stats: PersonStats[], boardId: BoardId) {
 /** Who reached the week first: the earliest «har uka i boks» announcement. */
 export async function firstToFinish(c: Challenge, week: string): Promise<number | null> {
   const row = await query<{ event_key: string }>(
-    "select event_key from messages where event_key like $1 order by created_at limit 1",
-    [`week:${c.id}:${week}:%`],
+    "select event_key from messages where group_id = $2 and event_key like $1 order by created_at limit 1",
+    [`week:${c.id}:${week}:%`, c.group_id],
   );
   return row[0] ? Number(row[0].event_key.split(":").at(-1)) : null;
 }
@@ -134,8 +134,8 @@ export async function firstToFinish(c: Challenge, week: string): Promise<number 
 export async function firstFinishCounts(c: Challenge): Promise<Map<number, number>> {
   const rows = await query<{ event_key: string }>(
     `select distinct on (split_part(event_key, ':', 3)) event_key from messages
-      where event_key like $1 order by split_part(event_key, ':', 3), created_at`,
-    [`week:${c.id}:%`],
+      where group_id = $2 and event_key like $1 order by split_part(event_key, ':', 3), created_at`,
+    [`week:${c.id}:%`, c.group_id],
   );
   const counts = new Map<number, number>();
   for (const r of rows) {

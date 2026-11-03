@@ -24,7 +24,7 @@ export default async function PrivacyPage() {
       <p>
         {contact
           ? <>Behandlingsansvarlig og kontakt for personvern: {contact}.</>
-          : <>Appen drives privat av Kontrolløren i gruppa. Spørsmål om personvern: send en melding til Kontrolløren i appen.</>}
+          : <>Appen drives privat. Spørsmål om personvern: send en melding til den som styrer gruppa di i appen.</>}
       </p>
 
       <h2 className={h2}>Hva vi lagrer</h2>
@@ -68,7 +68,7 @@ export default async function PrivacyPage() {
       <h2 className={h2}>Dine rettigheter</h2>
       <p>
         Du kan be om innsyn, retting, sletting og en kopi av dataene dine, og du kan trekke samtykker når som helst. Strava-dataene sletter du selv under
-        Meg → Strava → «Hva deles?». For resten: {contact ? <>kontakt {contact}</> : "si fra til Kontrolløren"}. Du får bekreftelse når det er gjort.
+        Meg → Strava → «Hva deles?». For resten: {contact ? <>kontakt {contact}</> : "si fra til den som styrer gruppa di"}. Du får bekreftelse når det er gjort.
         Mener du vi behandler opplysninger feil, kan du klage til <a className="underline" href="https://www.datatilsynet.no">Datatilsynet</a>.
       </p>
 
@@ -86,7 +86,7 @@ export default async function PrivacyPage() {
         then your group sees sport, date, duration and photo, plus distance, elevation, heart rate and title only if you opt in. We never sell data,
         show ads or use data for AI. Disconnecting Strava (in the app or on strava.com) deletes your Strava data immediately. Strava may collect usage
         data about this app&apos;s use of its API under Strava&apos;s privacy policy. Strava and other third-party providers make no warranties and are
-        not liable for indirect or consequential damages. Contact: {contact ?? "the group's admin (Kontrollør) in the app"}.
+        not liable for indirect or consequential damages. Contact: {contact ?? "your group's admin in the app"}.
       </p>
     </main>
   );

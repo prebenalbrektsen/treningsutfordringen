@@ -31,7 +31,7 @@ function timeLeft(week: string): string {
 export default async function WeekPage({ searchParams }: { searchParams: Promise<{ logget?: string }> }) {
   const user = await requireUser();
   const { logget } = await searchParams;
-  const c = await activeChallenge();
+  const c = await activeChallenge(user.group_id);
   if (!c) {
     return (
       <div className="card mt-6 p-6">
@@ -60,7 +60,7 @@ export default async function WeekPage({ searchParams }: { searchParams: Promise
   const me = board.members.find((m) => m.id === user.id);
   const myWeek = me?.results[weekIndex];
   const allowed = !me && (await mayJoin(c, user.id));
-  const pendingUsers = user.is_admin ? (await query<{ n: number }>("select count(*)::int as n from users where not approved"))[0].n : 0;
+  const pendingUsers = user.is_admin ? (await query<{ n: number }>("select count(*)::int as n from group_members where group_id = $1 and not approved", [user.group_id]))[0].n : 0;
   // The admin can paste the bøtekasse's Vipps link; then paying is one tap that opens the Vipps app.
   const vippsLink = /^https:\/\/\S+$/.test(c.vipps_info?.trim() ?? "") ? c.vipps_info!.trim() : null;
   const owedWeeks = me?.results.filter((r) => r.fine === "owed").map((r) => r.week) ?? [];
@@ -93,11 +93,11 @@ export default async function WeekPage({ searchParams }: { searchParams: Promise
   // «Til deg»: kudos and comments others gave on your workouts since you last looked.
   const toYou = (await query<{ kudos: number; comments: number }>(
     `select (select count(*)::int from kudos k join workouts w on w.id = k.workout_id
-              where w.user_id = $1 and k.user_id <> $1 and k.created_at > u.activity_seen_at) as kudos,
+              where w.user_id = $1 and k.user_id <> $1 and k.group_id = $2 and k.created_at > u.activity_seen_at) as kudos,
             (select count(*)::int from comments m join workouts w on w.id = m.workout_id
-              where w.user_id = $1 and m.user_id <> $1 and m.created_at > u.activity_seen_at) as comments
+              where w.user_id = $1 and m.user_id <> $1 and m.group_id = $2 and m.created_at > u.activity_seen_at) as comments
        from users u where u.id = $1`,
-    [user.id],
+    [user.id, user.group_id],
   ))[0];
 
   const ranked = board.members
@@ -208,12 +208,12 @@ export default async function WeekPage({ searchParams }: { searchParams: Promise
         </section>
       )}
       {me && me.claimedKr > 0 && (
-        <p className="rounded-xl bg-warn-soft px-4 py-3 text-sm font-semibold text-warn">{me.claimedKr} kr meldt betalt – venter på at kontrolløren bekrefter.</p>
+        <p className="rounded-xl bg-warn-soft px-4 py-3 text-sm font-semibold text-warn">{me.claimedKr} kr meldt betalt – venter på at {user.admin_title} bekrefter.</p>
       )}
 
       {!me && (allowed
         ? <JoinCard c={c} joined={false} count={board.members.length} />
-        : <p className="card p-4 text-sm text-muted">Du er ikke med i {c.name}. Vil du være med, si fra til kontrolløren.</p>)}
+        : <p className="card p-4 text-sm text-muted">Du er ikke med i {c.name}. Vil du være med, si fra til {user.admin_title}.</p>)}
 
       {task && (
         <section className="rounded-2xl bg-ink px-4 py-3 text-paper">
@@ -238,7 +238,7 @@ export default async function WeekPage({ searchParams }: { searchParams: Promise
               <li key={m.id} className="flex items-center gap-2.5 py-2">
                 <Avatar p={m} size={28} />
                 <Link href={`/person/${m.id}`} className="min-w-0 flex-1">
-                  <span className="flex min-w-0 items-center gap-1.5 text-sm font-semibold"><span className="truncate">{m.name.split(" ")[0]}</span>{m.is_admin && <RoleTag compact />}</span>
+                  <span className="flex min-w-0 items-center gap-1.5 text-sm font-semibold"><span className="truncate">{m.name.split(" ")[0]}</span>{m.is_admin && <RoleTag compact title={user.admin_title} />}</span>
                   <span className={`text-xs font-semibold ${st.tone === "ok" ? "text-ok" : st.tone === "bad" ? "text-bad" : st.tone === "warn" ? "text-warn" : "text-muted"}`}>{st.text}</span>
                 </Link>
                 <DayDots c={c} r={r} week={week} size="sm" />

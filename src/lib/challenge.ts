@@ -4,6 +4,7 @@ import { addDays, fromOsloLocal, mondayOf, osloDate, weeksBetween } from "./time
 
 export type Challenge = {
   id: number;
+  group_id: number;
   name: string;
   starts_on: string;
   ends_on: string;
@@ -114,14 +115,56 @@ export const WORKOUT_COLUMNS = `id, user_id, started_at, duration_min, sport, ti
   array(select k.user_id from kudos k where k.workout_id = workouts.id) as kudos_by,
   (select count(*) from comments m where m.workout_id = workouts.id)::int as comment_count`;
 
-export async function activeChallenge(): Promise<Challenge | null> {
-  // The newest challenge that has started, else the next one coming up.
+export async function activeChallenge(groupId: number): Promise<Challenge | null> {
+  // The group's newest challenge that has started, else the next one coming up.
   return one<Challenge>(
-    `select * from challenges
+    `select * from challenges where group_id = $2
       order by (starts_on <= $1::date) desc, case when starts_on <= $1::date then starts_on end desc nulls last, starts_on asc
       limit 1`,
-    [osloDate()],
+    [osloDate(), groupId],
   );
+}
+
+/**
+ * The challenge a person's own Strava workouts are judged by (for notices): the newest running or
+ * coming challenge they've joined, in any of their groups.
+ */
+export async function challengeOf(userId: number): Promise<Challenge | null> {
+  return one<Challenge>(
+    `select c.* from challenges c join challenge_members m on m.challenge_id = c.id and m.user_id = $1
+       join groups g on g.id = c.group_id and g.disabled_at is null
+      where c.ends_on >= $2::date order by c.starts_on desc limit 1`,
+    [userId, osloDate()],
+  );
+}
+
+/** How far back to fetch someone's Strava workouts: a week before their earliest running challenge. */
+export async function syncStartFor(userId: number): Promise<Date> {
+  const row = await one<{ start: string | null }>(
+    `select min(c.starts_on)::text as start from challenges c join challenge_members m on m.challenge_id = c.id and m.user_id = $1
+      where c.ends_on >= $2::date - 7`,
+    [userId, osloDate()],
+  );
+  return new Date(`${row?.start ? addDays(row.start, -7) : addDays(osloDate(), -7)}T00:00:00Z`);
+}
+
+/**
+ * The group's own verdicts on these workouts: rejected by the group's admin, or let through
+ * without a check-in. Another group's verdict doesn't count here. Changes the workouts in place.
+ */
+export async function applyVerdicts<W extends Pick<Workout, "id" | "rejected" | "checked_in_at">>(groupId: number, workouts: W[]): Promise<W[]> {
+  if (!workouts.length) return workouts;
+  const rows = await query<{ workout_id: number; rejected: boolean; approved_at: Date | null }>(
+    "select workout_id, rejected, approved_at from workout_verdicts where group_id = $1 and workout_id = any($2::int[])",
+    [groupId, workouts.map((w) => w.id)],
+  );
+  const byId = new Map(rows.map((r) => [r.workout_id, r]));
+  for (const w of workouts) {
+    const v = byId.get(w.id);
+    w.rejected = !!v?.rejected;
+    if (v?.approved_at && !w.checked_in_at) w.checked_in_at = v.approved_at;
+  }
+  return workouts;
 }
 
 /** The challenge's rules as short phrases, for chips and the rules recap. */
@@ -245,12 +288,13 @@ export async function loadBoard(c: Challenge, viewerId?: number): Promise<Board>
   const weeks = weeksBetween(c.starts_on, c.ends_on);
   const [members, rawWorkouts, tasks, fines, jokerUses] = await Promise.all([
     query<Member & ShareState>(
-      `select u.id, u.name, u.color, u.strava_athlete_id::text, u.is_admin, m.joined_at,
+      `select u.id, u.name, u.color, u.strava_athlete_id::text,
+              exists (select 1 from group_members g where g.group_id = $2 and g.user_id = u.id and g.role = 'admin') as is_admin, m.joined_at,
               u.share_distance, u.share_elevation, u.share_hr, u.share_title, u.strava_consent_at,
               extract(epoch from u.avatar_updated_at)::int as avatar_v
          from challenge_members m join users u on u.id = m.user_id
         where m.challenge_id = $1 order by u.name`,
-      [c.id],
+      [c.id, c.group_id],
     ),
     query<Workout>(
       `select ${WORKOUT_COLUMNS} from workouts
@@ -270,6 +314,17 @@ export async function loadBoard(c: Challenge, viewerId?: number): Promise<Board>
       [c.id],
     ),
   ]);
+  await applyVerdicts(c.group_id, rawWorkouts);
+  // Kudos and comments happen inside a group: count only this group's.
+  const ids = rawWorkouts.map((w) => w.id);
+  const social = ids.length ? await query<{ id: number; kudos_by: number[]; comment_count: number }>(
+    `select w.id, array(select k.user_id from kudos k where k.workout_id = w.id and k.group_id = $2) as kudos_by,
+            (select count(*) from comments m where m.workout_id = w.id and m.group_id = $2)::int as comment_count
+       from unnest($1::int[]) as w(id)`,
+    [ids, c.group_id],
+  ) : [];
+  const socialOf = new Map(social.map((x) => [x.id, x]));
+  for (const w of rawWorkouts) { const x = socialOf.get(w.id); w.kudos_by = x?.kudos_by ?? []; w.comment_count = x?.comment_count ?? 0; }
   const prefs = new Map(members.map((m) => [m.id, effectivePrefs(m)]));
   const workouts = rawWorkouts.map((w) => (w.user_id === viewerId ? w : redact(w, prefs.get(w.user_id)!)));
   const taskMap = new Map(tasks.map((t) => [t.week_start, t]));
