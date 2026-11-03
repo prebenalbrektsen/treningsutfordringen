@@ -549,3 +549,16 @@ export async function adminSyncStrava(userId: number): Promise<void> {
   await syncStrava(userId, new Date(`${c ? addDays(c.starts_on, -7) : osloDate()}T00:00:00Z`)).catch((e) => console.error("[admin sync]", e));
   revalidatePath("/admin");
 }
+
+/** Admin: a push to everyone with Strava connected who hasn't chosen what the group sees yet. */
+export async function remindStravaChoice(): Promise<void> {
+  await requireAdmin();
+  const undecided = await query<{ id: number }>("select id from users where strava_athlete_id is not null and strava_consent_at is null and approved");
+  await push(undecided.map((u) => u.id), "test", {
+    title: "Velg hva gruppa ser fra Strava",
+    body: "Strava krever at du velger hva som deles av øktene dine. Det tar ti sekunder – til da vises de som før.",
+    url: "/strava-deling",
+    tag: "strava-deling",
+  });
+  revalidatePath("/admin");
+}

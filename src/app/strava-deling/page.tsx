@@ -23,7 +23,7 @@ export default async function StravaSharingPage({ searchParams }: { searchParams
           <h1 className="display text-3xl">Hva deles fra Strava?</h1>
           <p className="mt-2 text-muted">
             {existing
-              ? "Strava krever nå at du sier ja til hva gruppa får se. Det tar ti sekunder."
+              ? "Strava krever nå at du velger hva gruppa får se. Vi har krysset av for det som vises i dag (unntatt puls) – fjern det du ikke vil dele, og trykk Lagre."
               : "Før du kobler til: dette er det gruppa får se av øktene dine."}
           </p>
         </div>
@@ -43,7 +43,7 @@ export default async function StravaSharingPage({ searchParams }: { searchParams
           <legend className="mb-1 font-bold">Vil du vise mer? <span className="font-normal text-muted">(valgfritt)</span></legend>
           {SHARE_OPTIONS.map((o) => (
             <label key={o.key} className="flex items-start gap-3 rounded-xl border border-line p-3">
-              <input type="checkbox" name={o.key} defaultChecked={user[o.key]} className="mt-1 h-5 w-5 shrink-0 accent-[#ff4d1c]" />
+              <input type="checkbox" name={o.key} defaultChecked={existing ? o.key !== "share_hr" : user[o.key]} className="mt-1 h-5 w-5 shrink-0 accent-[#ff4d1c]" />
               <span>
                 <span className="block font-semibold">{o.label}</span>
                 <span className="block text-sm text-muted">{o.hint}</span>

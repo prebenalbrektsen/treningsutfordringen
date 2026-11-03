@@ -1,5 +1,5 @@
 import { one, query } from "./db";
-import { redact, type SharePrefs } from "./sharing";
+import { effectivePrefs, redact, type ShareState } from "./sharing";
 import { addDays, fromOsloLocal, mondayOf, osloDate, weeksBetween } from "./time";
 
 export type Challenge = {
@@ -244,9 +244,9 @@ export async function loadBoard(c: Challenge, viewerId?: number): Promise<Board>
   const today = osloDate();
   const weeks = weeksBetween(c.starts_on, c.ends_on);
   const [members, rawWorkouts, tasks, fines, jokerUses] = await Promise.all([
-    query<Member & SharePrefs>(
+    query<Member & ShareState>(
       `select u.id, u.name, u.color, u.strava_athlete_id::text, u.is_admin, m.joined_at,
-              u.share_distance, u.share_elevation, u.share_hr, u.share_title,
+              u.share_distance, u.share_elevation, u.share_hr, u.share_title, u.strava_consent_at,
               extract(epoch from u.avatar_updated_at)::int as avatar_v
          from challenge_members m join users u on u.id = m.user_id
         where m.challenge_id = $1 order by u.name`,
@@ -270,7 +270,7 @@ export async function loadBoard(c: Challenge, viewerId?: number): Promise<Board>
       [c.id],
     ),
   ]);
-  const prefs = new Map(members.map((m) => [m.id, m]));
+  const prefs = new Map(members.map((m) => [m.id, effectivePrefs(m)]));
   const workouts = rawWorkouts.map((w) => (w.user_id === viewerId ? w : redact(w, prefs.get(w.user_id)!)));
   const taskMap = new Map(tasks.map((t) => [t.week_start, t]));
   const fineMap = new Map(fines.map((f) => [`${f.user_id}:${f.week_start}`, f.status]));
@@ -280,7 +280,7 @@ export async function loadBoard(c: Challenge, viewerId?: number): Promise<Board>
     weeks,
     currentWeek: mondayOf(today),
     tasks: taskMap,
-    members: members.map(({ share_distance: _d, share_elevation: _e, share_hr: _h, share_title: _t, ...m }) => {
+    members: members.map(({ share_distance: _d, share_elevation: _e, share_hr: _h, share_title: _t, strava_consent_at: _c, ...m }) => {
       const mine = workouts.filter((w) => w.user_id === m.id);
       const first = firstCountedWeek(c, m.joined_at);
       const results: WeekResult[] = weeks.map((week) => {
