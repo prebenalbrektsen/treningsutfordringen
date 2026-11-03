@@ -2,7 +2,10 @@ import { Pool, types } from "pg";
 
 // One pool per server process (kept on globalThis so dev hot reloads don't leak connections).
 const globalForPool = globalThis as unknown as { pool?: Pool };
-const pool = globalForPool.pool ?? new Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
+// Neon's string says sslmode=require, which pg already treats as verify-full but warns about on
+// every cold start. Say verify-full outright: same behaviour, quiet logs.
+const connectionString = process.env.DATABASE_URL?.replace(/sslmode=(?:prefer|require|verify-ca)\b/, "sslmode=verify-full");
+const pool = globalForPool.pool ?? new Pool({ connectionString, max: 5 });
 globalForPool.pool = pool;
 
 export async function query<T = Record<string, unknown>>(sql: string, params: unknown[] = []): Promise<T[]> {
