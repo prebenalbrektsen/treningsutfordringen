@@ -3,6 +3,7 @@
 import confetti from "canvas-confetti";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
+import type { Finale } from "@/lib/finale";
 import type { WeekRecap } from "@/lib/recap";
 import { fmtKm } from "@/lib/stats";
 import { formatMinutes } from "@/lib/time";
@@ -74,6 +75,7 @@ function JokerRules({ held, max, every }: { held: number; max: number; every: nu
 }
 
 type Item =
+  | { kind: "finale"; finale: Finale }
   | { kind: "recap"; recap: WeekRecap }
   | { kind: "joker"; count: number }
   | { kind: "badge"; id: string; title: string; emoji: string; how: string };
@@ -166,6 +168,65 @@ function RecapCard({ recap: r, onNext }: { recap: WeekRecap; onNext: () => void 
   );
 }
 
+/** The end of the challenge: your season, the group's «kåring», the bucket and a send-off. */
+function FinaleCard({ finale: f, onNext }: { finale: Finale; onNext: () => void }) {
+  const chips = [
+    f.bestWeek && `📈 Beste uke: uke ${f.bestWeek.weekNo} (${formatMinutes(f.bestWeek.minutes)})`,
+    f.bestStreak >= 2 && `🔥 ${f.bestStreak} uker på rad`,
+    f.people > 1 && `🏆 Nr. ${f.rank} av ${f.people} på treningstid`,
+    f.jokersUsed > 0 && `🃏 ${f.jokersUsed} ${f.jokersUsed === 1 ? "joker" : "jokere"} brukt`,
+    f.finesKr > 0 ? `💸 ${f.finesKr} kr i bøtta` : "😇 Ingen bøter",
+  ].filter(Boolean) as string[];
+  return (
+    <motion.div className="card w-full overflow-hidden p-0" initial={{ y: 40, opacity: 0, scale: 0.95 }} animate={{ y: 0, opacity: 1, scale: 1 }}
+      transition={{ type: "spring", stiffness: 140, damping: 16 }}>
+      <div className="bg-gradient-to-br from-[#ffd36b] via-[#ffb03b] to-[#ff7a1f] p-5 text-[#14130f]">
+        <p className="text-xs font-bold tracking-wider uppercase opacity-80">{f.range}</p>
+        <p className="display mt-1 text-4xl leading-none">{f.name} er over!</p>
+        <p className="mt-2 text-sm font-bold">{f.passed} av {f.weeks} uker i boks</p>
+      </div>
+      <div className="space-y-4 p-5">
+        <p className="font-semibold">{f.message}</p>
+        <div className="grid grid-cols-2 gap-2">
+          <Tile label="Økter" value={String(f.sessions)} />
+          <Tile label="Tid" value={formatMinutes(f.minutes)} />
+          {f.km > 0 && <Tile label="Distanse" value={`${fmtKm(f.km)} km`} note={f.elevation > 0 ? `${Math.round(f.elevation)} høydemeter` : undefined} />}
+          {f.badges.length > 0 && <Tile label="Merker" value={String(f.badges.length)} note={f.badges.map((b) => b.emoji).join(" ")} />}
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {chips.map((t) => <span key={t} className="rounded-full bg-heat-soft px-2.5 py-1 text-xs font-bold">{t}</span>)}
+        </div>
+        {f.awards.length > 0 && (
+          <div>
+            <p className="mb-2 font-bold">Kåringen</p>
+            <ul className="space-y-1.5">
+              {f.awards.map((a) => (
+                <li key={a.title} className={`flex items-center gap-3 rounded-xl p-2.5 text-sm ${a.mine ? "bg-[#ffd36b]/30 ring-2 ring-[#ffb03b]" : "bg-paper"}`}>
+                  <span className="text-2xl" aria-hidden="true">{a.emoji}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-xs font-bold tracking-wider text-muted uppercase">{a.title}</span>
+                    <span className="block font-bold">{a.names.join(" og ")}{a.mine && " – det er deg! 🎉"}</span>
+                  </span>
+                  <span className="shrink-0 text-xs font-semibold text-muted">{a.value}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        <div className="rounded-xl border border-line p-3 text-sm">
+          <p className="font-bold">Hele gjengen</p>
+          <p className="text-muted">
+            {f.group.sessions} økter · {formatMinutes(f.group.minutes)}{f.group.km >= 1 ? ` · ${fmtKm(f.group.km)} km` : ""}
+            {f.group.potKr > 0 && <> · <strong className="text-ink">{f.group.potKr} kr i bøtta</strong></>}
+          </p>
+          {f.group.perfect.length > 0 && <p className="mt-1 font-semibold">✅ Alle uker i boks: {f.group.perfect.join(", ")}</p>}
+        </div>
+        <button type="button" autoFocus onClick={onNext} className="btn btn-heat w-full">Takk for innsatsen! 🎉</button>
+      </div>
+    </motion.div>
+  );
+}
+
 function Dialog({ children, onClose, label }: { children: React.ReactNode; onClose: () => void; label: string }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -215,10 +276,11 @@ function Spin({ children }: { children: React.ReactNode }) {
  * Shows new jokers and badges since last time, one at a time. The first visit only remembers the
  * current state (so nobody gets a pile of old badges at once).
  */
-export function Celebrations({ userId, challengeId, jokers, badges, recap }: {
+export function Celebrations({ userId, challengeId, jokers, badges, recap, finale }: {
   userId: number;
   challengeId: number;
   recap?: WeekRecap | null;
+  finale?: Finale | null;
   jokers: { earnedTotal: number; held: number; max: number; every: number; enabled: boolean };
   badges: { id: string; title: string; emoji: string; how: string }[];
 }) {
@@ -232,6 +294,13 @@ export function Celebrations({ userId, challengeId, jokers, badges, recap }: {
       try { shown = !!localStorage.getItem(recapKey); localStorage.setItem(recapKey, "1"); } catch { shown = true; }
       if (!shown) recapItems.push({ kind: "recap", recap });
     }
+    // The end of the challenge: once, after last week's recap.
+    if (finale) {
+      const finaleKey = `sb-finale-${userId}-${challengeId}`;
+      let shown = false;
+      try { shown = !!localStorage.getItem(finaleKey); localStorage.setItem(finaleKey, "1"); } catch { shown = true; }
+      if (!shown) recapItems.push({ kind: "finale", finale });
+    }
     const key = `sb-celebrated-${userId}-${challengeId}`;
     let seen: { jokers: number; badges: string[] } | null = null;
     try { seen = JSON.parse(localStorage.getItem(key) ?? "null"); } catch {}
@@ -243,7 +312,7 @@ export function Celebrations({ userId, challengeId, jokers, badges, recap }: {
     for (const b of badges) if (!seen.badges.includes(b.id)) items.push({ kind: "badge", ...b });
     if (items.length) setQueue(items);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, challengeId, jokers.earnedTotal, badges.map((b) => b.id).join(","), recap?.week]);
+  }, [userId, challengeId, jokers.earnedTotal, badges.map((b) => b.id).join(","), recap?.week, !!finale]);
 
   return <CelebrationQueue queue={queue} setQueue={setQueue} jokers={jokers} />;
 }
@@ -255,14 +324,22 @@ function CelebrationQueue({ queue, setQueue, jokers }: {
 }) {
   const current = queue[0];
   useEffect(() => { if (current && (current.kind !== "recap" || current.recap.passed)) burst(); }, [current]);
+  // The finale gets a longer shower.
+  useEffect(() => {
+    if (current?.kind !== "finale") return;
+    const t = [600, 1200].map((ms) => setTimeout(burst, ms));
+    return () => t.forEach(clearTimeout);
+  }, [current]);
   const next = () => setQueue((q) => q.slice(1));
 
   return (
     <AnimatePresence>
       {current && (
-        <Dialog key={current.kind === "recap" ? `recap-${current.recap.week}` : current.kind === "joker" ? "joker" : current.id} onClose={next}
-          label={current.kind === "recap" ? `Din uke ${current.recap.weekNo}` : current.kind === "joker" ? "Du sparte en joker" : `Nytt merke: ${current.title}`}>
-          {current.kind === "recap" ? (
+        <Dialog key={current.kind === "finale" ? "finale" : current.kind === "recap" ? `recap-${current.recap.week}` : current.kind === "joker" ? "joker" : current.id} onClose={next}
+          label={current.kind === "finale" ? `${current.finale.name} er over` : current.kind === "recap" ? `Din uke ${current.recap.weekNo}` : current.kind === "joker" ? "Du sparte en joker" : `Nytt merke: ${current.title}`}>
+          {current.kind === "finale" ? (
+            <FinaleCard finale={current.finale} onNext={next} />
+          ) : current.kind === "recap" ? (
             <RecapCard recap={current.recap} onNext={next} />
           ) : current.kind === "joker" ? (
             <>
@@ -304,6 +381,33 @@ const SAMPLE_MISSED: WeekRecap = {
   message: "Bare én økt unna! Ny uke, blanke ark – denne tar du.",
 };
 
+const SAMPLE_FINALE: Finale = {
+  challengeId: 0, name: "Høstbøtta 2026", range: "26. okt.–20. des.", weeks: 8, passed: 7, sessions: 29, minutes: 1610, km: 142, elevation: 1830,
+  bestWeek: { weekNo: 47, minutes: 312 }, bestStreak: 5, badges: [{ emoji: "🔥", title: "Jernvilje" }, { emoji: "🌅", title: "Morgenfugl" }, { emoji: "🎯", title: "Allsidig" }],
+  jokersUsed: 1, finesKr: 0, rank: 2, people: 6,
+  awards: [
+    { emoji: "⏱️", title: "Flest timer", names: ["Pappa"], value: "31 t 20 min", mine: false },
+    { emoji: "💪", title: "Flest økter", names: ["Preben"], value: "29 økter", mine: true },
+    { emoji: "🔥", title: "Lengste rekke", names: ["Mamma", "Preben"], value: "5 uker på rad", mine: true },
+    { emoji: "🏃", title: "Lengst løpt", names: ["Ida"], value: "88,4 km", mine: false },
+    { emoji: "🥇", title: "Oftest først i mål", names: ["Jonas"], value: "3 ganger", mine: false },
+    { emoji: "📣", title: "Heiagjengens leder", names: ["Bestemor"], value: "64 kudos gitt", mine: false },
+  ],
+  group: { sessions: 151, minutes: 8420, km: 611, potKr: 450, perfect: ["Mamma"] },
+  message: "💪 For en høst! Nesten alle uker i boks – det er sånn vaner bygges.",
+};
+
+/** The end-of-challenge card again, from the front page once it's over. */
+export function FinaleReplay({ finale }: { finale: Finale }) {
+  const [queue, setQueue] = useState<Item[]>([]);
+  return (
+    <>
+      <button type="button" className="btn btn-heat w-full" onClick={() => setQueue([{ kind: "finale", finale }])}>🏆 Se oppsummeringen og kåringen</button>
+      <CelebrationQueue queue={queue} setQueue={setQueue} jokers={{ held: 0, max: 0, every: 0 }} />
+    </>
+  );
+}
+
 /** Admin: show the celebrations on demand, to see (or show off) how they look. */
 export function CelebrationPreview({ jokers }: { jokers: { held: number; max: number; every: number } }) {
   const [queue, setQueue] = useState<Item[]>([]);
@@ -311,6 +415,7 @@ export function CelebrationPreview({ jokers }: { jokers: { held: number; max: nu
     <div className="flex flex-wrap gap-2">
       <button type="button" className="btn btn-ghost btn-sm" onClick={() => setQueue([{ kind: "recap", recap: SAMPLE_RECAP }])}>📊 Ukesoppsummering</button>
       <button type="button" className="btn btn-ghost btn-sm" onClick={() => setQueue([{ kind: "recap", recap: SAMPLE_MISSED }])}>📉 Uke uten mål</button>
+      <button type="button" className="btn btn-ghost btn-sm" onClick={() => setQueue([{ kind: "finale", finale: SAMPLE_FINALE }])}>🏆 Slutt på utfordringen</button>
       <button type="button" className="btn btn-ghost btn-sm" onClick={() => setQueue([{ kind: "joker", count: 1 }])}>🃏 Ny joker</button>
       <button type="button" className="btn btn-ghost btn-sm" onClick={() => setQueue([{ kind: "badge", id: "preview", title: "Morgenfugl", emoji: "🌅", how: "5 økter startet før kl. 7" }])}>🏅 Nytt merke</button>
       <CelebrationQueue queue={queue} setQueue={setQueue} jokers={jokers} />

@@ -1,7 +1,8 @@
 import { PoweredByStrava } from "@/components/StravaBrand";
 import { CelebrationsFor } from "@/components/CelebrationsFor";
 import { applyJokers } from "./actions";
-import { JokerInfo } from "@/components/Celebrate";
+import { FinaleReplay, JokerInfo } from "@/components/Celebrate";
+import { challengeFinale } from "@/lib/finale";
 import { Count } from "@/components/Count";
 import { InstallPrompt } from "@/components/InstallPrompt";
 import Link from "next/link";
@@ -70,6 +71,7 @@ export default async function WeekPage({ searchParams }: { searchParams: Promise
     .filter((x) => x.missing > 0 && x.missing <= (me?.jokers.held ?? 0));
   const started = today >= c.starts_on;
   const over = today > c.ends_on;
+  const finale = over ? await challengeFinale(board, user.id) : null;
 
   const potPaid = board.members.reduce((s, m) => s + m.paidKr, 0);
   const potOpen = board.members.reduce((s, m) => s + m.owedKr + m.claimedKr, 0);
@@ -134,6 +136,7 @@ export default async function WeekPage({ searchParams }: { searchParams: Promise
             {ruleParts(c).map((r) => <li key={r} className="rounded-full bg-line/70 px-2.5 py-1 text-xs font-semibold">{r}</li>)}
           </ul>
         </details>
+        {finale && <div className="mt-4"><FinaleReplay finale={finale} /></div>}
       </section>
 
       {me && myWeek && myWeek.state !== "before" && (
