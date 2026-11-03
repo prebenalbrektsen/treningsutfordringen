@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { announceWeek } from "./announce";
+import { activeChallenge } from "./challenge";
 import { push } from "./push";
 import { sportLabel } from "./sports";
 import { one, query } from "./db";
@@ -107,9 +108,14 @@ async function importActivity(userId: number, a: Activity): Promise<boolean> {
   await mergeManualDuplicate(userId, rows[0].id, a.start_date);
   // Fresh workouts only (not the backlog fetched when someone first connects).
   if (Date.now() - new Date(a.start_date).getTime() < 24 * 3600000) {
+    // Say what the challenge's rules actually make of it, so a 28-minute run isn't promised to count.
+    const c = await activeChallenge();
+    const body = c && minutes < c.session_minutes
+      ? `${minutes} min – kortere enn ${c.session_minutes} min, så den teller ikke i utfordringen.`
+      : `${minutes} min – sjekk inn${c && !c.proof_required ? "" : " med bilde"}, så teller den.`;
     await push([userId], "checkin", {
       title: `Ny økt fra Strava: ${sportLabel(a.sport_type)}`,
-      body: `${minutes} min – sjekk inn med bilde, så teller den.`,
+      body,
       url: "/logg",
       tag: `checkin-${rows[0].id}`,
     });
