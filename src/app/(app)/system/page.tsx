@@ -35,6 +35,11 @@ export default async function SystemPage() {
         <p className="mt-1 text-muted">System: alle grupper og invitasjoner – bare for deg som eier appen.</p>
       </div>
       <AdminNav active="system" sysadmin />
+      {!contact && (
+        <a href="#personvern" className="block rounded-2xl bg-warn-soft p-4 text-sm font-semibold text-warn">
+          ⚠️ Fyll inn «Kontakt for personvern» nederst før du inviterer andre grupper. Folk utenfor familien har krav på å vite hvem som er ansvarlig for dataene deres (GDPR). Navn og e-post holder.
+        </a>
+      )}
 
       <section className="card space-y-3 p-4">
         <h2 className="font-bold">Inviter noen til å starte en gruppe</h2>
@@ -80,7 +85,7 @@ export default async function SystemPage() {
         </ul>
       </section>
 
-      <section className="card space-y-2 p-4">
+      <section id="personvern" className="card space-y-2 p-4">
         <h2 className="font-bold">Kontakt for personvern</h2>
         <p className="text-sm text-muted">Vises i <Link href="/personvern" className="underline">personvernerklæringen</Link> som ansvarlig og kontakt for hele appen. Tomt = «si fra til den som styrer gruppa di».</p>
         <form action={savePrivacyContact} className="flex gap-2">

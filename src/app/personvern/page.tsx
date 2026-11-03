@@ -11,7 +11,10 @@ export default async function PrivacyPage() {
   const h2 = "mt-8 mb-2 text-lg font-bold";
   return (
     <main className="mx-auto max-w-2xl px-4 pt-[calc(2rem+env(safe-area-inset-top))] pb-16 leading-relaxed">
-      <Link href="/"><Logo /></Link>
+      <div className="flex items-center justify-between gap-3">
+        <Link href="/"><Logo /></Link>
+        <Link href="/" className="btn btn-ghost btn-sm">← Tilbake til appen</Link>
+      </div>
       <h1 className="display mt-6 text-4xl">Personvern og vilkår</h1>
       <p className="mt-2 text-sm text-muted">Sist oppdatert 3. november 2026</p>
 
@@ -88,6 +91,7 @@ export default async function PrivacyPage() {
         data about this app&apos;s use of its API under Strava&apos;s privacy policy. Strava and other third-party providers make no warranties and are
         not liable for indirect or consequential damages. Contact: {contact ?? "your group's admin in the app"}.
       </p>
+      <Link href="/" className="btn mt-10 w-full">Tilbake til appen</Link>
     </main>
   );
 }
