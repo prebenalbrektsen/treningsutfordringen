@@ -129,8 +129,8 @@ function RecapCard({ recap: r, onNext }: { recap: WeekRecap; onNext: () => void 
           <p className="display mt-1 text-4xl leading-none">{r.passed ? "I boks!" : "Ikke i boks"}</p>
           <p className="mt-1.5 text-sm font-semibold opacity-90">
             {r.passed
-              ? r.jokersUsed ? `Med ${r.jokersUsed === 1 ? "1 joker" : `${r.jokersUsed} jokere`} 🃏` : "Ingen bot denne uka 🎉"
-              : r.fined ? `${r.penaltyKr} kr i bøtta 💸` : "Ingen bot – den er strøket"}
+              ? r.jokersUsed ? `Med ${r.jokersUsed === 1 ? "1 joker" : `${r.jokersUsed} jokere`} 🃏` : `Ingen bot for uke ${r.weekNo} 🎉`
+              : r.fined ? `${r.penaltyKr} kr i bøtta for uke ${r.weekNo} 💸` : "Ingen bot – den er strøket"}
           </p>
         </div>
         <Ring done={r.credits + r.jokersUsed} needed={r.needed} passed={r.passed} />

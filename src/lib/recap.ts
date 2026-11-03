@@ -43,7 +43,7 @@ function message(r: Omit<WeekRecap, "message">): string {
   }
   if (r.credits === 0) return "En rolig uke skjer alle. Det viktigste er å komme i gang igjen – hva med en tur i dag?";
   if (r.needed - r.credits === 1) return "Bare én økt unna! Ny uke, blanke ark – denne tar du.";
-  return "Ikke helt denne gangen, men du var i gang. Ny uke starter nå – sett av tid til første økt!";
+  return "Ikke helt denne gangen, men du var i gang. Ny uke er i gang – sett av tid til neste økt!";
 }
 
 /** The person's recap for last week, or null when there is no finished challenge week to show. */
