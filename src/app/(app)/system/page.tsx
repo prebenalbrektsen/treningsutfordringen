@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { CopyLink } from "@/components/ActionForm";
-import { Logo } from "@/components/Logo";
+import { AdminNav } from "@/components/AdminNav";
 import { requireSysadmin } from "@/lib/auth";
 import { query } from "@/lib/db";
 import { formatDay, osloDate, relativeTime } from "@/lib/time";
-import { savePrivacyContact } from "../(app)/actions";
+import { savePrivacyContact } from "../actions";
 import { createGroupInvite, revokeGroupInvite, toggleGroupDisabled } from "./actions";
 
 /** For the owner of the app: every group, invitations to start new ones, and app-wide settings. */
@@ -29,12 +29,12 @@ export default async function SystemPage() {
   const contact = (await query<{ value: string }>("select value from settings where key = 'privacy_contact'"))[0]?.value ?? "";
   const appUrl = process.env.APP_URL ?? "";
   return (
-    <main className="mx-auto max-w-2xl space-y-5 px-4 pt-[calc(1.5rem+env(safe-area-inset-top))] pb-16">
-      <div className="flex items-center justify-between"><Link href="/"><Logo /></Link><Link href="/" className="text-sm font-semibold text-muted underline">Til appen</Link></div>
+    <div className="space-y-5 pt-2">
       <div>
-        <h1 className="display text-4xl">System</h1>
-        <p className="text-muted">Bare for deg som eier appen. Grupper, invitasjoner til nye grupper og innstillinger for hele appen.</p>
+        <h1 className="display text-5xl">Admin</h1>
+        <p className="mt-1 text-muted">System: alle grupper og invitasjoner – bare for deg som eier appen.</p>
       </div>
+      <AdminNav active="system" sysadmin />
 
       <section className="card space-y-3 p-4">
         <h2 className="font-bold">Inviter noen til å starte en gruppe</h2>
@@ -73,7 +73,7 @@ export default async function SystemPage() {
                 <p className="text-muted">{g.challenge ? `${g.challenge}${g.ends_on && g.ends_on < today ? " (ferdig)" : g.ends_on ? ` · til ${formatDay(g.ends_on)}` : ""}` : "Ingen utfordring"} · startet {formatDay(new Date(g.created_at).toISOString().slice(0, 10))}</p>
               </div>
               <form action={toggleGroupDisabled.bind(null, g.id)}>
-                <button className="btn btn-ghost btn-sm shrink-0">{g.disabled ? "Slå på" : "Slå av"}</button>
+                <button className="btn btn-ghost btn-sm shrink-0 whitespace-nowrap">{g.disabled ? "Slå på" : "Slå av"}</button>
               </form>
             </li>
           ))}
@@ -88,6 +88,6 @@ export default async function SystemPage() {
           <button className="btn btn-sm">Lagre</button>
         </form>
       </section>
-    </main>
+    </div>
   );
 }

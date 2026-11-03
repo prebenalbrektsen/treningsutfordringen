@@ -1,5 +1,6 @@
 import { CelebrationPreview } from "@/components/Celebrate";
 import Link from "next/link";
+import { ADMIN_TABS, AdminNav } from "@/components/AdminNav";
 import { ActionForm, CopyLink } from "@/components/ActionForm";
 import { AddParticipantForm } from "@/components/AddParticipantForm";
 import { ActionMenu } from "@/components/ActionMenu";
@@ -14,12 +15,7 @@ import { addDays, ago, formatDay, formatWeekRange, isoWeekNumber, mondayOf, oslo
 import { sportLabel } from "@/lib/sports";
 import { activateStravaWebhook, adminSyncStrava, approveUser, removeInvite, confirmAllClaimed, createGroupLink, disableGroupLink, remindStravaChoice, saveGroupSettings, rejectUser, deleteTask, newInvite, saveChallenge, saveTask, setFine, settleAll, toggleInvite, toggleMember, countThisWeek } from "../actions";
 
-const TABS = [
-  { id: "boter", label: "Bøter" },
-  { id: "ukeskrav", label: "Ukeskrav" },
-  { id: "deltakere", label: "Deltakere" },
-  { id: "regler", label: "Regler" },
-] as const;
+const TABS = ADMIN_TABS;
 
 function ChallengeFields({ c }: { c?: Challenge }) {
   const today = osloDate();
@@ -180,15 +176,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         </section>
       ) : (
         <>
-          <nav className="-mx-4 flex gap-1 overflow-x-auto px-4" aria-label="Admin">
-            {TABS.map((t) => (
-              <Link key={t.id} href={`?fane=${t.id}`} className={`relative shrink-0 rounded-full px-4 py-2 text-sm font-semibold ${tab === t.id ? "bg-ink text-paper" : "bg-line/60 text-muted"}`}>
-                {t.label}
-                {t.id === "boter" && claimedCount > 0 && <span className="ml-1.5 rounded-full bg-heat px-1.5 text-xs text-white">{claimedCount}</span>}
-                {t.id === "deltakere" && pending.length > 0 && <span className="ml-1.5 rounded-full bg-heat px-1.5 text-xs text-white">{pending.length}</span>}
-              </Link>
-            ))}
-          </nav>
+          <AdminNav active={tab} sysadmin={user.is_sysadmin} counts={{ boter: claimedCount, deltakere: pending.length }} />
 
           {tab === "boter" && board && (
             <section className="card p-4">
@@ -377,7 +365,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                   <label className="block"><span className="label">Hva du heter som styrer (bestemt form)</span><input name="admin_title" defaultValue={user.admin_title} className="field" maxLength={30} required /></label>
                   <button className="btn btn-sm">Lagre</button>
                 </form>
-                {user.is_sysadmin && <p className="text-sm"><Link href="/system" className="font-semibold underline">System: alle grupper og invitasjoner →</Link></p>}
+                
               </section>
               <section className="card space-y-2 p-4">
                 <h2 className="font-bold">Forhåndsvis feiringer</h2>

@@ -20,7 +20,8 @@ export function NavLinks({ isAdmin, mobile, badges = {}, onStrava, avatar = null
   // On Strava the watch logs for you, so the tab is a list of workouts, not a form.
   const base = onStrava ? LINKS.map((l) => (l.href === "/logg" ? { ...l, label: "Økter", icon: "M22 12h-4l-3 9L9 3l-3 9H2" } : l)) : LINKS;
   const links = isAdmin ? [...base, ADMIN] : base;
-  const active = (href: string) => (href === "/" ? path === "/" : path.startsWith(href));
+  // /system is part of Admin (the owner's own tab there).
+  const active = (href: string) => (href === "/" ? path === "/" : path.startsWith(href) || (href === "/admin" && path.startsWith("/system")));
   // Start from the server's numbers, then ask again after every page change and when the app
   // comes back, so a badge clears as soon as you've seen the thing (the layout itself doesn't re-render).
   const [counts, setCounts] = useState<Record<string, number>>(badges);
