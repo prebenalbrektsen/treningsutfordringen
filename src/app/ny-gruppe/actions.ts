@@ -72,7 +72,7 @@ export async function createGroup(_: GroupFormState, form: FormData): Promise<Gr
   await query("insert into challenge_members (challenge_id, user_id) values ($1, $2)", [challenge!.id, me.id]);
   await query("update users set current_group_id = $2 where id = $1", [me.id, group!.id]);
   revalidatePath("/", "layout");
-  redirect("/admin?fane=deltakere&ny=1");
+  redirect("/velkommen?eier=1");
 }
 
 /** Show another of your groups. */
