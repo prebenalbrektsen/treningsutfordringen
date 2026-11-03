@@ -21,7 +21,7 @@ export default async function LogPage({ searchParams }: { searchParams: Promise<
 
   // «Alle»: everyone's checked-in workouts, grouped by day.
   if ((await searchParams).vis === "alle") {
-    const board = await loadBoard(c);
+    const board = await loadBoard(c, user.id);
     return (
       <div className="space-y-4 pt-2">
         <h1 className="display text-5xl">Økter</h1>
@@ -55,7 +55,7 @@ export default async function LogPage({ searchParams }: { searchParams: Promise<
     const result = { ...evaluateWeek(c, week, recent, task ?? undefined), fine: null };
     // Waiting for check-in first: that is the thing to do on this screen.
     recent.sort((a, b) => Number(b.status === "pending") - Number(a.status === "pending"));
-    const celebrationBoard = await loadBoard(c);
+    const celebrationBoard = await loadBoard(c, user.id);
     return (
       <div className="space-y-4 pt-2">
         <CelebrationsFor c={c} board={celebrationBoard} userId={user.id} />

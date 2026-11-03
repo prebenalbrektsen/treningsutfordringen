@@ -19,7 +19,7 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
   const user = await requireUser();
   const { id } = await params;
   const c = await activeChallenge();
-  const board = c ? await loadBoard(c) : null;
+  const board = c ? await loadBoard(c, user.id) : null;
   const p = board?.members.find((m) => m.id === Number(id));
 
   // In the app but not in this challenge: a simple card instead of a 404.
@@ -112,9 +112,14 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
       <section className="card p-4">
         <h2 className="font-bold">Øktene til {first}</h2>
         <ul className="divide-y divide-line">
-          {p.workouts.filter((w) => w.checked_in_at || user.is_admin || p.id === user.id).map((w) => (
+          {p.workouts.filter((w) => w.checked_in_at || p.id === user.id).map((w) => (
             <WorkoutRow key={w.id} w={w} me={user.id} task={board.tasks.get(mondayOf(osloDate(new Date(w.started_at))))} c={c} isAdmin={user.is_admin} />
           ))}
+          {user.is_admin && p.id !== user.id && (() => {
+            // The Kontrollør may nudge, but sees no details before the person shares them.
+            const waiting = p.workouts.filter((w) => w.status === "pending").length;
+            return waiting > 0 ? <li className="py-3 text-sm font-semibold text-warn">{waiting === 1 ? "1 økt venter" : `${waiting} økter venter`} på innsjekk</li> : null;
+          })()}
           {!p.workouts.some((w) => w.checked_in_at) && <li className="py-3 text-sm text-muted">Ingen innsjekkede økter ennå – gi {first} et heiarop i Prat! 📣</li>}
         </ul>
       </section>

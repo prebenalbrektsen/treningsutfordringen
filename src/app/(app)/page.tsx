@@ -39,7 +39,7 @@ export default async function WeekPage({ searchParams }: { searchParams: Promise
       </div>
     );
   }
-  const board = await loadBoard(c);
+  const board = await loadBoard(c, user.id);
   // Challenges coming up that this person has not signed up for (or has, and may back out of).
   // Only the ones this person may join: open ones, or ones the admin picked them for.
   const upcoming = await query<Challenge & { joined: boolean; count: number }>(

@@ -43,10 +43,10 @@ export function CheckIn({ workoutId, checkedIn, hasPhoto, proofRequired }: { wor
       {checkedIn
         ? picker(hasPhoto ? "Bytt bilde" : "Legg til bilde", "btn btn-ghost btn-sm")
         : proofRequired || !hasPhoto
-          ? picker("Sjekk inn med bilde", "btn btn-heat btn-sm")
+          ? picker("Sjekk inn og del med bilde", "btn btn-heat btn-sm")
           : null}
       {!checkedIn && !proofRequired && (
-        <button className="btn btn-heat btn-sm" disabled={pending} onClick={() => run(null)}>Sjekk inn</button>
+        <button className="btn btn-heat btn-sm" disabled={pending} onClick={() => run(null)}>Sjekk inn og del</button>
       )}
       {msg && <span className={`text-sm font-semibold ${msg.ok ? "text-ok" : "text-bad"}`}>{msg.text}</span>}
     </div>

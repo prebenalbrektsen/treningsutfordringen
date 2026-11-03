@@ -90,9 +90,9 @@ function ChallengeFields({ c }: { c?: Challenge }) {
 }
 
 export default async function AdminPage({ searchParams }: { searchParams: Promise<{ fane?: string }> }) {
-  await requireAdmin();
+  const user = await requireAdmin();
   const c = await activeChallenge();
-  const board = c ? await loadBoard(c) : null;
+  const board = c ? await loadBoard(c, user.id) : null;
   const allUsers = await query<{ id: number; name: string; email: string | null; invite_token: string | null; is_admin: boolean; strava: boolean; approved: boolean; created_at: Date; activated: boolean }>(
     "select id, name, email, invite_token, is_admin, strava_athlete_id is not null as strava, approved, created_at, password_hash is not null as activated from users order by name",
   );

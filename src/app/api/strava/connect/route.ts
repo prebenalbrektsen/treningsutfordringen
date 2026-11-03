@@ -9,6 +9,8 @@ export async function GET() {
   const user = await currentUser();
   if (!user) redirect("/login");
   if (!stravaConfigured()) redirect("/meg?strava=mangler");
+  // Strava's terms: say yes to what the group sees before connecting.
+  if (!user.strava_consent_at) redirect("/strava-deling?koble=1");
   const state = newToken(18);
   await query("delete from oauth_states where expires_at < now()");
   await query("insert into oauth_states (token, user_id, expires_at) values ($1, $2, now() + interval '20 minutes')", [state, user.id]);

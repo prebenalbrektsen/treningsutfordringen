@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { CelebrationsFor } from "@/components/CelebrationsFor";
 import { PushSettings } from "@/components/PushSettings";
 import { CATEGORIES } from "@/lib/push";
@@ -28,6 +29,8 @@ const STRAVA_MSG: Record<string, [string, string]> = {
   feil: ["Noe gikk galt med Strava-tilkoblingen. Prøv igjen.", "text-bad bg-bad-soft"],
   tilgang: ["Du må gi tilgang til å lese aktiviteter for at det skal virke.", "text-bad bg-bad-soft"],
   mangler: ["Strava er ikke satt opp i appen ennå – si fra til admin.", "text-warn bg-warn-soft"],
+  deling: ["Lagret. Gruppa ser bare det du har valgt.", "text-ok bg-ok-soft"],
+  frakoblet: ["Strava er koblet fra. Du kan fortsatt logge økter selv.", "text-ok bg-ok-soft"],
 };
 
 export default async function MePage({ searchParams }: { searchParams: Promise<{ strava?: string }> }) {
@@ -39,7 +42,7 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
     "select id, name, last_used_at, created_at from passkeys where user_id = $1 order by created_at", [user.id]);
   const avatarV = (await one<{ v: number | null }>("select extract(epoch from avatar_updated_at)::int as v from users where id = $1", [user.id]))!.v;
   const c = await activeChallenge();
-  const board = c ? await loadBoard(c) : null;
+  const board = c ? await loadBoard(c, user.id) : null;
   const me = board?.members.find((m) => m.id === user.id);
   const stats = computeStats(me?.workouts ?? []);
   const myStats = c && board && me ? (await personStats(c, board, "alt")).find((x) => x.m.id === me.id) ?? null : null;
@@ -74,6 +77,7 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
           {user.strava_athlete_id ? (
             <>
               <SyncButton />
+              <Link href="/strava-deling" className="btn btn-ghost btn-sm">Hva deles?</Link>
               <form action={stravaDisconnect}><button className="btn btn-ghost btn-sm">Koble fra</button></form>
               <PoweredByStrava className="mt-1 block w-full" />
             </>

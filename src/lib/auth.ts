@@ -16,6 +16,11 @@ export type User = {
   strava_athlete_id: string | null;
   approved: boolean;
   strava_synced_at: Date | null;
+  strava_consent_at: Date | null;
+  share_distance: boolean;
+  share_elevation: boolean;
+  share_hr: boolean;
+  share_title: boolean;
 };
 
 export function newToken(bytes = 24): string {
@@ -54,7 +59,8 @@ export async function currentUser(): Promise<User | null> {
   const token = (await cookies()).get(COOKIE)?.value;
   if (!token) return null;
   return one<User>(
-    `select u.id, u.name, u.email, u.is_admin, u.color, u.strava_athlete_id, u.strava_synced_at, u.approved
+    `select u.id, u.name, u.email, u.is_admin, u.color, u.strava_athlete_id, u.strava_synced_at, u.approved,
+            u.strava_consent_at, u.share_distance, u.share_elevation, u.share_hr, u.share_title
        from sessions s join users u on u.id = s.user_id
       where s.token = $1 and s.expires_at > now()`,
     [token],

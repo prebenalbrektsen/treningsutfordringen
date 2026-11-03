@@ -1,6 +1,7 @@
 import { StayFresh } from "@/components/StayFresh";
 import { APP_VERSION } from "@/lib/version";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { Logo } from "@/components/Logo";
 import { NavLinks } from "@/components/NavLinks";
@@ -11,6 +12,8 @@ import { badgesFor } from "@/lib/badges";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
+  // Connected before consent existed: ask once (Strava's terms), else they're disconnected.
+  if (user.strava_athlete_id && !user.strava_consent_at) redirect("/strava-deling");
   // Keep everyone's Strava workouts fresh without anybody pressing a button.
   after(async () => {
     await syncStale();

@@ -14,7 +14,7 @@ export default async function StatsPage({ searchParams }: { searchParams: Promis
   const { tavle, periode } = await searchParams;
   const c = await activeChallenge();
   if (!c) return <p className="pt-6 text-muted">Ingen utfordring ennå.</p>;
-  const board = await loadBoard(c);
+  const board = await loadBoard(c, user.id);
   const period: Period = periode === "uke" ? "uke" : "alt";
   const statsForPeriod = await personStats(c, board, period);
   const perSport = sportBoards(statsForPeriod);

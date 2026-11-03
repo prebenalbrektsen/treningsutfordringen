@@ -3,6 +3,7 @@ import Link from "next/link";
 import { BackLink } from "@/components/BackLink";
 import { Icon } from "@/components/Icon";
 import { notFound } from "next/navigation";
+import { redact, type SharePrefs } from "@/lib/sharing";
 import { Avatar } from "@/components/Avatar";
 import { CheckIn } from "@/components/CheckIn";
 import { RoleTag } from "@/components/RoleTag";
@@ -19,11 +20,15 @@ import { KudosButton } from "@/components/KudosButton";
 export default async function WorkoutPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
   const { id } = await params;
-  const w = await one<Workout & { name: string; color: string }>(
-    `select ${WORKOUT_COLUMNS.replace(/\bid,/, "workouts.id,")}, u.name, u.color from workouts join users u on u.id = workouts.user_id where workouts.id = $1`,
+  const row = await one<Workout & SharePrefs & { name: string; color: string }>(
+    `select ${WORKOUT_COLUMNS.replace(/\bid,/, "workouts.id,")}, u.name, u.color,
+            u.share_distance, u.share_elevation, u.share_hr, u.share_title
+       from workouts join users u on u.id = workouts.user_id where workouts.id = $1`,
     [Number(id)],
   );
-  if (!w) notFound();
+  // Nothing is shared until the owner checks it in, not even by guessing the address.
+  if (!row || (!row.checked_in_at && row.user_id !== user.id)) notFound();
+  const w = row.user_id === user.id ? row : redact(row, row);
   const c = await activeChallenge();
   // The status depends on the person's other workouts that day (one per day counts).
   if (c) {

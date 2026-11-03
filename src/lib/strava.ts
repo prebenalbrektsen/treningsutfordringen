@@ -68,7 +68,15 @@ async function accessToken(userId: number): Promise<string | null> {
 
 export async function disconnectStrava(userId: number): Promise<void> {
   const token = await accessToken(userId).catch(() => null);
-  if (token) await fetch("https://www.strava.com/oauth/deauthorize", { method: "POST", headers: { authorization: `Bearer ${token}` } }).catch(() => {});
+  // oauth/revoke replaces oauth/deauthorize (the only one accepted from 1 June 2027).
+  if (token) {
+    const basic = Buffer.from(`${process.env.STRAVA_CLIENT_ID}:${process.env.STRAVA_CLIENT_SECRET}`).toString("base64");
+    await fetch("https://www.strava.com/oauth/revoke", {
+      method: "POST",
+      headers: { authorization: `Basic ${basic}` },
+      body: new URLSearchParams({ token, token_type_hint: "access_token" }),
+    }).catch(() => {});
+  }
   await query(
     `update users set strava_athlete_id = null, strava_access_token = null, strava_refresh_token = null, strava_expires_at = null
       where id = $1`,
