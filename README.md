@@ -18,6 +18,11 @@ Laget med Next.js og Postgres, for mobilen, på norsk.
 - **Jokere:** ekstra økter blir jokere som kan redde en uke du ikke klarte.
 - **Bøter:** du trykker «Jeg har betalt», og admin bekrefter eller frafaller boten.
 - **Nye deltakere** som blir med midt i en uke, er med fra neste mandag. Admin kan la uka telle likevel.
+- **Grupper:** én app kan ha flere lukkede grupper, for eksempel familien og jobben. Hver gruppe
+  har egne deltakere, admin, utfordringer, bøter og chat. Er du med i flere grupper, bytter du
+  gruppe øverst i appen, og øktene dine teller i alle gruppene du er med i.
+- **Strava-deling:** hver deltaker velger selv hva som deles fra Strava, og ingenting vises for
+  andre før økta er sjekket inn.
 
 ## Kom i gang lokalt
 
@@ -51,15 +56,22 @@ koblingen. Uten Strava logger deltakerne økter selv.
 
 ## Sett opp din egen
 
-Appen er laget for én gruppe per installasjon. Vil du ha flere grupper, setter du opp én kopi
-for hver, med egen database.
+Én installasjon holder til mange grupper, så du trenger bare én.
 
 1. Lag en gratis Postgres-database, for eksempel hos [Neon](https://neon.tech).
 2. Importer repoet i [Vercel](https://vercel.com).
 3. Legg inn miljøvariablene fra `.env.example`: `DATABASE_URL`, `APP_URL`, `CRON_SECRET` og
    eventuelt Strava-nøklene. `CRON_SECRET` må være satt, ellers sendes ingen påminnelser.
 4. Deploy. Databasen settes opp automatisk, siden `npm run build` kjører migreringene først.
-5. Åpne appen, lag kontoen din (du blir admin) og sett opp utfordringen under Admin.
+5. Åpne appen og lag kontoen din. Du blir systemadmin (eier av appen) og admin for den første
+   gruppa. Sett opp utfordringen under Admin.
+
+### Flere grupper
+
+Som systemadmin lager du en engangslenke under **Admin → System**. Den som får lenken, lager sin
+egen gruppe med navn, første utfordring og en egen tittel på admin (for eksempel «Generalen»), og
+inviterer gjengen sin derfra. Gruppene ser ikke hverandres deltakere, økter eller chat.
+Systemadmin kan se alle gruppene og slå dem av og på.
 
 ## Lisens
 
