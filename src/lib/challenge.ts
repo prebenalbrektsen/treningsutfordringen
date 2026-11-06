@@ -22,7 +22,12 @@ export type Challenge = {
   joker_every: number | null;
   joker_max: number;
   week_ends_on: number; // 0 = Sunday … 6 = Saturday
+  merge_mode: MergeMode;
 };
+
+/** Whether participants may merge workouts into one: never, back to back (same day, short break) or any on the same day. */
+export type MergeMode = "off" | "back_to_back" | "same_day";
+export const MERGE_BREAK_MIN = 30;
 
 export type Jokers = { enabled: boolean; held: number; earnedTotal: number; used: number; progress: number; every: number; max: number };
 
@@ -82,14 +87,20 @@ export type Workout = {
   comment_count: number;
   checked_in_at: Date | null;
   imported_at: Date;
+  merged_into: number | null;
   status?: WorkoutStatus;
+  /** Set on a workout others are merged into: every part, first one first. */
+  parts?: { id: number; sport: string; minutes: number }[];
+  /** The workout's own minutes/distance before merged parts were added (duration_min/distance_m then hold the total). */
+  own_minutes?: number;
+  own_distance_m?: number | null;
 };
 
 /**
  * counts: one of the week's workouts · pending: waiting for check-in · expired: not checked in in time
  * short: under the minimum length · sameday: a longer workout already counts that day · rejected: by admin
  */
-export type WorkoutStatus = "counts" | "pending" | "expired" | "short" | "sameday" | "rejected";
+export type WorkoutStatus = "counts" | "pending" | "expired" | "short" | "sameday" | "rejected" | "merged";
 
 
 export type WeeklyTask = { id: number; week_start: string; title: string; description: string | null; auto_sports: string[] };
@@ -112,7 +123,7 @@ export type WeekResult = {
 };
 
 export const WORKOUT_COLUMNS = `id, user_id, started_at, duration_min, sport, title, distance_m, elevation_m, avg_hr,
-  source, strava_id::text, proof_image is not null as has_proof, meets_task, rejected, checked_in_at, imported_at,
+  source, strava_id::text, proof_image is not null as has_proof, meets_task, rejected, checked_in_at, imported_at, merged_into,
   array(select k.user_id from kudos k where k.workout_id = workouts.id) as kudos_by,
   (select count(*) from comments m where m.workout_id = workouts.id)::int as comment_count`;
 
@@ -179,6 +190,8 @@ export function ruleParts(c: Challenge): string[] {
   if (c.week_ends_on !== 0) parts.push(`uka går ${WEEKDAY_NAMES[(c.week_ends_on + 1) % 7]}–${WEEKDAY_NAMES[c.week_ends_on]}`);
   if (c.max_per_day) parts.push(c.max_per_day === 1 ? "maks 1 økt per dag" : `maks ${c.max_per_day} økter per dag`);
   parts.push(c.check_in_hours ? `sjekk inn innen ${c.check_in_hours} t` : "sjekk inn før uka er over");
+  if (c.merge_mode === "back_to_back") parts.push(`økter rett etter hverandre kan slås sammen (maks ${MERGE_BREAK_MIN} min pause)`);
+  if (c.merge_mode === "same_day") parts.push("økter samme dag kan slås sammen");
   if (c.proof_required) parts.push("bilde påkrevd");
   if (c.joker_every) parts.push(`${c.joker_every === 1 ? "ekstra økt" : `${c.joker_every} ekstra økter`} = 🃏 joker (maks ${c.joker_max} på lur)`);
   parts.push(`bot ${c.penalty_kr} kr`);
@@ -205,15 +218,69 @@ export function checkInDeadline(c: Challenge, w: Pick<Workout, "started_at" | "d
   return new Date(Math.min(base + c.check_in_hours * 3600000, weekEnd));
 }
 
+type Part = Pick<Workout, "started_at" | "duration_min">;
+
+/** May these workouts (any order) count as one under the challenge's rule? Uses each one's own minutes. */
+export function mergeAllowed(c: Pick<Challenge, "merge_mode">, parts: Part[]): boolean {
+  if (c.merge_mode === "off" || parts.length < 2) return false;
+  const sorted = [...parts].sort((a, b) => +new Date(a.started_at) - +new Date(b.started_at));
+  if (new Set(sorted.map((p) => osloDate(new Date(p.started_at)))).size > 1) return false;
+  if (c.merge_mode === "same_day") return true;
+  for (let i = 1; i < sorted.length; i++) {
+    const prevEnd = +new Date(sorted[i - 1].started_at) + sorted[i - 1].duration_min * 60000;
+    if (+new Date(sorted[i].started_at) - prevEnd > MERGE_BREAK_MIN * 60000) return false;
+  }
+  return true;
+}
+
+/**
+ * Adds merged workouts into the one they were merged into (minutes and distance), so it counts as
+ * one workout. Safe to run again on the same objects. Returns the ids of the merged-away parts.
+ * With merging off in this challenge, or a pair that breaks its rule, they count separately.
+ */
+function applyMerges(c: Challenge, workouts: Workout[]): Set<number> {
+  for (const w of workouts) {
+    w.own_minutes ??= w.duration_min;
+    if (w.own_distance_m === undefined) w.own_distance_m = w.distance_m;
+    w.duration_min = w.own_minutes;
+    w.distance_m = w.own_distance_m;
+    w.parts = undefined;
+  }
+  const hidden = new Set<number>();
+  if (c.merge_mode === "off") return hidden;
+  const byId = new Map(workouts.map((w) => [w.id, w]));
+  const children = new Map<number, Workout[]>();
+  for (const w of workouts) {
+    if (!w.merged_into) continue;
+    const parent = byId.get(w.merged_into);
+    // The first part isn't in this list (e.g. only unchecked workouts were loaded): still not a workout of its own.
+    if (!parent) { hidden.add(w.id); continue; }
+    children.set(parent.id, [...(children.get(parent.id) ?? []), w]);
+  }
+  for (const [parentId, kids] of children) {
+    const parent = byId.get(parentId)!;
+    const own = (w: Workout) => ({ started_at: w.started_at, duration_min: w.own_minutes! });
+    if (!mergeAllowed(c, [parent, ...kids].map(own))) continue;
+    const parts = [parent, ...kids].sort((a, b) => +new Date(a.started_at) - +new Date(b.started_at));
+    parent.duration_min = parts.reduce((n, p) => n + p.own_minutes!, 0);
+    const km = parts.reduce((n, p) => n + (p.own_distance_m ?? 0), 0);
+    parent.distance_m = km || null;
+    parent.parts = parts.map((p) => ({ id: p.id, sport: p.sport, minutes: p.own_minutes! }));
+    for (const k of kids) hidden.add(k.id);
+  }
+  return hidden;
+}
+
 /**
  * Sets each workout's status. Only `max_per_day` workouts per day count toward the week (the
  * longest checked-in ones), so three workouts squeezed into the last day don't complete a week.
  * Pass one person's workouts.
  */
 export function annotate(c: Challenge, workouts: Workout[], now = new Date()): Workout[] {
+  const merged = applyMerges(c, workouts);
   const countedPerDay = new Map<string, Set<Workout>>();
   const candidates = workouts
-    .filter((w) => !w.rejected && w.duration_min >= c.session_minutes && w.checked_in_at)
+    .filter((w) => !merged.has(w.id) && !w.rejected && w.duration_min >= c.session_minutes && w.checked_in_at)
     .sort((a, b) => b.duration_min - a.duration_min || a.id - b.id);
   for (const w of candidates) {
     const day = osloDate(new Date(w.started_at));
@@ -222,7 +289,8 @@ export function annotate(c: Challenge, workouts: Workout[], now = new Date()): W
     countedPerDay.set(day, set);
   }
   for (const w of workouts) {
-    if (w.rejected) w.status = "rejected";
+    if (merged.has(w.id)) w.status = "merged";
+    else if (w.rejected) w.status = "rejected";
     else if (w.duration_min < c.session_minutes) w.status = "short";
     else if (!w.checked_in_at) w.status = checkInDeadline(c, w) > now ? "pending" : "expired";
     else w.status = countedPerDay.get(osloDate(new Date(w.started_at)))?.has(w) ? "counts" : "sameday";
@@ -236,7 +304,7 @@ export function workoutCredit(c: Challenge, w: Pick<Workout, "duration_min">): n
 }
 
 export function meetsTask(w: Workout, task: WeeklyTask | undefined): boolean {
-  return !!task && (w.meets_task || task.auto_sports.includes(w.sport));
+  return !!task && (w.meets_task || task.auto_sports.includes(w.sport) || !!w.parts?.some((p) => task.auto_sports.includes(p.sport)));
 }
 
 /** `workouts` = one person's workouts in that week. */

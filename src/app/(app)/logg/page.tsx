@@ -5,13 +5,14 @@ import { SyncButton } from "@/components/SyncButton";
 import { WorkoutRow } from "@/components/WorkoutRow";
 import { requireUser } from "@/lib/auth";
 import { AllWorkouts, WorkoutsSwitch } from "@/components/AllWorkouts";
-import { activeChallenge, annotate, evaluateWeek, loadBoard, WORKOUT_COLUMNS, type WeeklyTask, type Workout } from "@/lib/challenge";
+import { activeChallenge, annotate, evaluateWeek, loadBoard, mergeAllowed, WORKOUT_COLUMNS, type Challenge, type WeeklyTask, type Workout } from "@/lib/challenge";
+import { sportLabel } from "@/lib/sports";
 import { Pill, statusLabel, WeekProgress } from "@/components/WeekProgress";
 import { WatchGuide } from "@/components/WatchGuide";
 import { Icon } from "@/components/Icon";
 import { one, query } from "@/lib/db";
 import { stravaConfigured } from "@/lib/strava";
-import { addDays, ago, osloDate, toOsloLocalInput, weekStart } from "@/lib/time";
+import { addDays, ago, formatMinutes, osloDate, toOsloLocalInput, weekStart } from "@/lib/time";
 
 export default async function LogPage({ searchParams }: { searchParams: Promise<{ vis?: string }> }) {
   const user = await requireUser();
@@ -53,6 +54,7 @@ export default async function LogPage({ searchParams }: { searchParams: Promise<
       [user.id, week],
     ));
     const result = { ...evaluateWeek(c, week, recent, task ?? undefined), fine: null };
+    const mergeOffers = mergeCandidates(c, recent);
     // Waiting for check-in first: that is the thing to do on this screen.
     recent.sort((a, b) => Number(b.status === "pending") - Number(a.status === "pending"));
     const celebrationBoard = await loadBoard(c, user.id);
@@ -81,7 +83,7 @@ export default async function LogPage({ searchParams }: { searchParams: Promise<
           {recent.length ? (
             <ul className="divide-y divide-line">
               {recent.map((w) => (
-                <WorkoutRow key={w.id} w={w} c={c} me={user.id} task={task ?? undefined} canEdit isAdmin={user.is_admin} />
+                <WorkoutRow key={w.id} w={w} c={c} me={user.id} task={task ?? undefined} canEdit isAdmin={user.is_admin} mergeNext={mergeOffers.get(w.id)} />
               ))}
             </ul>
           ) : (
@@ -118,4 +120,26 @@ export default async function LogPage({ searchParams }: { searchParams: Promise<
       </div>
     </div>
   );
+}
+
+/**
+ * For each not-yet-checked-in workout (or merged group): the next one of yours the challenge lets
+ * you merge it with, e.g. strength at 17:00 and a run at 18:05. Annotated workouts in.
+ */
+function mergeCandidates(c: Challenge, ws: Workout[]): Map<number, { id: number; label: string }> {
+  const offers = new Map<number, { id: number; label: string }>();
+  if (c.merge_mode === "off") return offers;
+  const open = (w: Workout) => !w.checked_in_at && !w.rejected && w.status !== "merged" && w.status !== "expired";
+  const byStart = [...ws].sort((a, b) => +new Date(a.started_at) - +new Date(b.started_at));
+  const own = (w: Workout) => ({ started_at: w.started_at, duration_min: w.own_minutes ?? w.duration_min });
+  for (const first of byStart) {
+    if (!open(first) || first.merged_into) continue;
+    const parts = ws.filter((w) => w.id === first.id || (w.merged_into === first.id && w.status === "merged"));
+    const lastStart = Math.max(...parts.map((p) => +new Date(p.started_at)));
+    const next = byStart.find((n) => open(n) && !n.parts && !n.merged_into && +new Date(n.started_at) > lastStart);
+    if (next && mergeAllowed(c, [...parts, next].map(own))) {
+      offers.set(first.id, { id: next.id, label: `${sportLabel(next.sport).toLowerCase()} ${formatMinutes(next.own_minutes ?? next.duration_min)}` });
+    }
+  }
+  return offers;
 }

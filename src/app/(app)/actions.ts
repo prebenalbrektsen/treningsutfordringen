@@ -7,7 +7,7 @@ import { announceWeek, postToGroup } from "@/lib/announce";
 import { processAvatar, processProof } from "@/lib/images";
 import { admins, CATEGORIES, everyoneBut, push } from "@/lib/push";
 import { checkPassword, hashPassword, newToken, requireAdmin, requireSysadmin, requireUser } from "@/lib/auth";
-import { activeChallenge, checkInDeadline, loadBoard, mayJoin, syncStartFor, type Challenge } from "@/lib/challenge";
+import { activeChallenge, checkInDeadline, loadBoard, mayJoin, mergeAllowed, syncStartFor, type Challenge } from "@/lib/challenge";
 import { one, query } from "@/lib/db";
 import { disconnectStrava, subscribeWebhook, syncStrava } from "@/lib/strava";
 import { sportLabel, WATER_SPORTS } from "@/lib/sports";
@@ -83,12 +83,42 @@ export async function logWorkout(_: ActionState, form: FormData): Promise<Action
 
 async function ownWorkout(id: number) {
   const user = await requireUser();
-  const w = await one<{ user_id: number; source: string; started_at: Date; duration_min: number; imported_at: Date; checked_in_at: Date | null; has_proof: boolean }>(
-    "select user_id, source, started_at, duration_min, imported_at, checked_in_at, proof_image is not null as has_proof from workouts where id = $1",
+  const w = await one<{ user_id: number; source: string; started_at: Date; duration_min: number; imported_at: Date; checked_in_at: Date | null; has_proof: boolean; merged_into: number | null }>(
+    "select user_id, source, started_at, duration_min, imported_at, checked_in_at, proof_image is not null as has_proof, merged_into from workouts where id = $1",
     [id],
   );
   if (!w || (w.user_id !== user.id && !(user.is_admin && (await inGroup(user.group_id, w.user_id))))) throw new Error("Ikke din økt");
   return { user, w };
+}
+
+/**
+ * Merge `nextId` into `firstId` (e.g. strength then a run), so they count as one workout of their
+ * combined length. Only your own, not yet checked-in workouts, and only as the challenge allows.
+ */
+export async function mergeWorkouts(firstId: number, nextId: number): Promise<void> {
+  const user = await requireUser();
+  const c = await activeChallenge(user.group_id);
+  if (!c || c.merge_mode === "off") return;
+  const rows = await query<{ id: number; started_at: Date; duration_min: number; merged_into: number | null; checked_in_at: Date | null; rejected: boolean }>(
+    `select id, started_at, duration_min, merged_into, checked_in_at, rejected from workouts
+      where user_id = $1 and (id = any($2::int[]) or merged_into = $3)`,
+    [user.id, [firstId, nextId], firstId],
+  );
+  const first = rows.find((r) => r.id === firstId), next = rows.find((r) => r.id === nextId);
+  if (!first || !next || first.merged_into || next.merged_into || first.checked_in_at || next.checked_in_at || first.rejected || next.rejected) return;
+  if (+new Date(next.started_at) <= +new Date(first.started_at)) return;
+  if (await one("select 1 from workouts where merged_into = $1", [nextId])) return; // already has parts of its own
+  if (!mergeAllowed(c, rows)) return;
+  await query("update workouts set merged_into = $1 where id = $2", [firstId, nextId]);
+  revalidatePath("/", "layout");
+}
+
+/** Split a merged workout back into its parts, as long as it isn't checked in. */
+export async function splitWorkout(firstId: number): Promise<void> {
+  const { user, w } = await ownWorkout(firstId);
+  if (w.user_id !== user.id || w.checked_in_at) return;
+  await query("update workouts set merged_into = null where merged_into = $1", [firstId]);
+  revalidatePath("/", "layout");
 }
 
 export async function deleteWorkout(id: number): Promise<void> {
@@ -240,6 +270,7 @@ export async function saveChallenge(_: ActionState, form: FormData): Promise<Act
     int(form, "joker_every"),
     Math.max(0, int(form, "joker_max") ?? 2),
     Math.min(6, Math.max(0, int(form, "week_ends_on") ?? 0)),
+    (["back_to_back", "same_day"] as const).find((m) => m === form.get("merge_mode")) ?? "off",
   ];
   if (!values[0] || !values[1] || !values[2] || values[3] == null || !values[4] || !values[5]) return { error: "Fyll inn alle feltene." };
   const old = id ? await one<Challenge>("select * from challenges where id = $1 and group_id = $2", [id, user.group_id]) : null;
@@ -263,15 +294,15 @@ export async function saveChallenge(_: ActionState, form: FormData): Promise<Act
       `update challenges set name = $2, starts_on = $3, ends_on = $4, penalty_kr = $5, min_sessions = $6,
          session_minutes = $7, long_session_minutes = $8, vipps_info = $9, check_in_hours = $10, max_per_day = $11,
          proof_required = $12, description = $13, long_session_counts = $14, join_mode = $15, joker_every = $16, joker_max = $17,
-         week_ends_on = $18
-       where id = $1 and group_id = $19`,
+         week_ends_on = $18, merge_mode = $19
+       where id = $1 and group_id = $20`,
       [id, ...values, user.group_id],
     );
   } else {
     const c = await one<Challenge>(
       `insert into challenges (name, starts_on, ends_on, penalty_kr, min_sessions, session_minutes, long_session_minutes, vipps_info,
-         check_in_hours, max_per_day, proof_required, description, long_session_counts, join_mode, joker_every, joker_max, week_ends_on, group_id)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) returning *`,
+         check_in_hours, max_per_day, proof_required, description, long_session_counts, join_mode, joker_every, joker_max, week_ends_on, merge_mode, group_id)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19) returning *`,
       [...values, user.group_id],
     );
     // Nobody is signed up automatically: everyone gets a «Bli med» card and opts in.
@@ -438,6 +469,7 @@ export async function checkIn(workoutId: number, dataUrl: string | null): Promis
     if ("error" in p) return { error: p.error };
     photo = p;
   }
+  if (w.merged_into && c?.merge_mode !== "off") return { error: "Denne er slått sammen med en annen økt – sjekk inn den i stedet." };
   if (!w.checked_in_at) {
     if (c && !user.is_admin && checkInDeadline(c, w) < new Date()) return { error: "Fristen for å sjekke inn denne økta har gått ut." };
     if ((c?.proof_required ?? true) && !photo && !w.has_proof) return { error: "Legg ved et bilde for å sjekke inn." };

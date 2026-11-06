@@ -198,10 +198,12 @@ async function mergeManualDuplicate(userId: number, stravaWorkoutId: number, sta
     `update workouts s set
        proof_image = coalesce(s.proof_image, m.proof_image), proof_mime = coalesce(s.proof_mime, m.proof_mime),
        meets_task = s.meets_task or m.meets_task, rejected = s.rejected or m.rejected,
-       checked_in_at = coalesce(s.checked_in_at, m.checked_in_at)
+       checked_in_at = coalesce(s.checked_in_at, m.checked_in_at), merged_into = coalesce(s.merged_into, m.merged_into)
      from workouts m where s.id = $1 and m.id = $2`,
     [stravaWorkoutId, manual.id],
   );
+  // Workouts merged into the manual one now belong to the Strava one.
+  await query("update workouts set merged_into = $1 where merged_into = $2 and id <> $1", [stravaWorkoutId, manual.id]);
   await query("insert into kudos (workout_id, user_id, group_id, created_at) select $1, user_id, group_id, created_at from kudos where workout_id = $2 on conflict do nothing", [stravaWorkoutId, manual.id]);
   // Each group's verdict on the manual one carries over too.
   await query(

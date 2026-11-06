@@ -83,6 +83,7 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
               short: `Under ${c.session_minutes} min – teller ikke som ukeøkt`,
               sameday: `Teller ikke – maks ${c.max_per_day} økt${c.max_per_day === 1 ? "" : "er"} per dag`,
               rejected: `Underkjent av ${user.admin_title} – teller ikke`,
+              merged: "Slått sammen med økta før – telles og sjekkes inn der",
             }[w.status]}
           </p>
           {w.status === "pending" && mine && <p className="mt-1 text-sm">{c.proof_required ? "Legg ved et bilde for å sjekke inn." : "Trykk «Sjekk inn» så teller den."}</p>}

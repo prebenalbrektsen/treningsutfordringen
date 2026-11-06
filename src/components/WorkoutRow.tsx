@@ -3,7 +3,7 @@ import type { Challenge, WeeklyTask, Workout } from "@/lib/challenge";
 import { checkInDeadline, meetsTask, workoutCredit } from "@/lib/challenge";
 import { sportIcon, sportLabel } from "@/lib/sports";
 import { formatMinutes, relativeTime } from "@/lib/time";
-import { approveWorkout, deleteWorkout, toggleMeetsTask, toggleRejected } from "@/app/(app)/actions";
+import { approveWorkout, deleteWorkout, mergeWorkouts, splitWorkout, toggleMeetsTask, toggleRejected } from "@/app/(app)/actions";
 import { ActionMenu } from "./ActionMenu";
 import { KudosButton } from "./KudosButton";
 import { CheckIn } from "./CheckIn";
@@ -12,6 +12,11 @@ import { Icon } from "./Icon";
 function timeLeft(deadline: Date): string {
   const min = Math.max(0, Math.round((deadline.getTime() - Date.now()) / 60000));
   return min >= 60 ? `${Math.floor(min / 60)} t igjen` : `${min} min igjen`;
+}
+
+/** «Styrke 60 min + Løping 30 min» for a merged workout. */
+export function partsLabel(w: Workout): string | null {
+  return w.parts ? w.parts.map((p) => `${sportLabel(p.sport)} ${formatMinutes(p.minutes)}`).join(" + ") : null;
 }
 
 /** What the workout means for the week. A plain «teller» is the normal case, so it gets no label. */
@@ -36,15 +41,20 @@ export function WorkoutRow({
   canEdit,
   isAdmin,
   me,
+  mergeNext,
 }: {
   w: Workout;
   c: Challenge;
   me?: number;
+  /** A workout right after this one it may be merged with (only offered on your own check-in list). */
+  mergeNext?: { id: number; label: string };
   who?: { id: number; name: string; color: string };
   task?: WeeklyTask;
   canEdit?: boolean;
   isAdmin?: boolean;
 }) {
+  // Merged into another workout: that one shows both.
+  if (w.status === "merged") return null;
   const km = w.distance_m ? (w.distance_m / 1000).toLocaleString("nb-NO", { maximumFractionDigits: 1 }) : null;
   const mine = me !== undefined && w.user_id === me;
   const waiting = w.status === "pending" || w.status === "expired";
@@ -70,6 +80,7 @@ export function WorkoutRow({
           <Link href={`/okt/${w.id}`}>{w.title || sportLabel(w.sport)}</Link>
         </p>
         <p className="truncate text-sm text-muted">{meta.join(" · ")}</p>
+        {w.parts && <p className="mt-0.5 text-xs font-semibold text-muted">🔗 Slått sammen: {partsLabel(w)}</p>}
         {(w.status !== "counts" || workoutCredit(c, w) > 1 || (task && w.checked_in_at && meetsTask(w, task))) && (
           <p className="mt-1 flex flex-wrap gap-1.5 text-xs font-semibold">
             <StatusPill w={w} c={c} />
@@ -79,6 +90,21 @@ export function WorkoutRow({
 
         {canEdit && mine && w.status === "pending" && (
           <div className="mt-2"><CheckIn workoutId={w.id} checkedIn={false} hasPhoto={w.has_proof} proofRequired={c.proof_required} /></div>
+        )}
+
+        {canEdit && mine && !w.checked_in_at && (mergeNext || w.parts) && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {mergeNext && (
+              <form action={mergeWorkouts.bind(null, w.id, mergeNext.id)}>
+                <button className="inline-flex h-8 items-center rounded-full border border-line px-3 text-xs font-semibold">🔗 Slå sammen med {mergeNext.label}</button>
+              </form>
+            )}
+            {w.parts && (
+              <form action={splitWorkout.bind(null, w.id)}>
+                <button className="inline-flex h-8 items-center rounded-full border border-line px-3 text-xs font-semibold text-muted">Del opp igjen</button>
+              </form>
+            )}
+          </div>
         )}
 
         <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm">

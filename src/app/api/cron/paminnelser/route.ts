@@ -55,7 +55,8 @@ async function remindGroup(groupId: number): Promise<number> {
   // 1) Check-in deadlines within the next 4 hours.
   const now = Date.now();
   for (const w of workouts) {
-    if (w.checked_in_at || w.rejected || w.duration_min < c.session_minutes) continue;
+    // A merged-away part is checked in through the workout it was merged into.
+    if (w.checked_in_at || w.rejected || (w.merged_into && c.merge_mode !== "off") || w.duration_min < c.session_minutes) continue;
     const left = checkInDeadline(c, w).getTime() - now;
     if (left <= 0 || left > 4 * 3600000) continue;
     if (!(await once(`checkin:${w.id}`))) continue;

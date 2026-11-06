@@ -45,6 +45,7 @@ export function FeedCard({ w, who, c, me, task }: { w: Workout; who: Who; c: Cha
       </header>
 
       {w.title && <p className="px-4 pb-2.5 font-semibold">{w.title}</p>}
+      {w.parts && <p className="px-4 pb-2.5 text-xs font-semibold text-muted">🔗 Slått sammen: {w.parts.map((p) => `${sportLabel(p.sport)} ${formatMinutes(p.minutes)}`).join(" + ")}</p>}
 
       {w.has_proof ? (
         <Link href={`/okt/${w.id}`} className="block bg-line/40">
