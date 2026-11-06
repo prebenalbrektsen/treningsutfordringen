@@ -12,12 +12,14 @@ Laget med Next.js og Postgres, for mobilen, på norsk.
 ## Slik fungerer det
 
 - **Ukeskravet:** et antall økter av en viss lengde, eller én lang økt. Admin bestemmer.
-- **Uka** går fra mandag kl. 00 til søndag kl. 24, norsk tid. Klarer du ikke kravet, blir det bot.
+- **Uka** går fra mandag kl. 00 til søndag kl. 24, norsk tid – eller admin velger en annen siste dag
+  (for eksempel torsdag, så uka går fredag–torsdag). Klarer du ikke kravet, blir det bot.
+- **Påminnelse:** siste kvelden i uka får de som ikke har uka i boks, beskjed (fra kl. 17).
 - **Ukeskrav (valgfritt):** en ekstra oppgave for én uke, som «én økt i vann».
 - **Innsjekk:** økter må sjekkes inn for å telle. Admin kan kreve et bilde som bevis.
 - **Jokere:** ekstra økter blir jokere som kan redde en uke du ikke klarte.
 - **Bøter:** du trykker «Jeg har betalt», og admin bekrefter eller frafaller boten.
-- **Nye deltakere** som blir med midt i en uke, er med fra neste mandag. Admin kan la uka telle likevel.
+- **Nye deltakere** som blir med midt i en uke, er med fra neste uke. Admin kan la uka telle likevel.
 - **Grupper:** én app kan ha flere lukkede grupper, for eksempel familien og jobben. Hver gruppe
   har egne deltakere, admin, utfordringer, bøter og chat. Er du med i flere grupper, bytter du
   gruppe øverst i appen, og øktene dine teller i alle gruppene du er med i.
