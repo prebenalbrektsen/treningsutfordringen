@@ -13,7 +13,7 @@ import { activeChallenge, annotate, checkInDeadline, WORKOUT_COLUMNS, type Worko
 import { one, query } from "@/lib/db";
 import { sportIcon, sportLabel } from "@/lib/sports";
 import { fmtKm } from "@/lib/stats";
-import { ago, formatMinutes, mondayOf, osloDate, relativeTime } from "@/lib/time";
+import { ago, formatMinutes, osloDate, relativeTime, weekStart } from "@/lib/time";
 import { deleteComment } from "../../actions";
 import { KudosButton } from "@/components/KudosButton";
 
@@ -38,7 +38,7 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
     const week = await query<Workout>(
       `select ${WORKOUT_COLUMNS} from workouts where user_id = $1
          and started_at >= ($2::date)::timestamp at time zone 'Europe/Oslo' and started_at < ($2::date + 7)::timestamp at time zone 'Europe/Oslo'`,
-      [w.user_id, mondayOf(osloDate(new Date(w.started_at)))],
+      [w.user_id, weekStart(osloDate(new Date(w.started_at)), c)],
     );
     await applyVerdicts(user.group_id, week);
     w.status = annotate(c, week).find((x) => x.id === w.id)?.status;

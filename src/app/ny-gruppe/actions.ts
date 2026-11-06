@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { currentUser, hashPassword, newToken, startSession } from "@/lib/auth";
 import { one, query } from "@/lib/db";
+import { addDays, weekStart } from "@/lib/time";
 
 export type GroupFormState = { error?: string } | undefined;
 
@@ -46,7 +47,11 @@ export async function createGroup(_: GroupFormState, form: FormData): Promise<Gr
   const groupName = String(form.get("group_name") ?? "").trim().slice(0, 50);
   const title = String(form.get("admin_title") ?? "").trim().slice(0, 30) || "Kontrolløren";
   const challengeName = String(form.get("challenge_name") ?? "").trim().slice(0, 50);
-  const startsOn = String(form.get("starts_on") ?? "");
+  const weekEnd = Math.min(6, Math.max(0, Number(form.get("week_ends_on") ?? 0) || 0));
+  const pickedStart = String(form.get("starts_on") ?? "");
+  // Begin on the first day of a whole week (the day after the chosen last weekday).
+  const first = pickedStart && weekStart(pickedStart, { week_ends_on: weekEnd });
+  const startsOn = first && first !== pickedStart ? addDays(first, 7) : pickedStart;
   const endsOn = String(form.get("ends_on") ?? "");
   const num = (k: string, d: number) => { const n = Number(String(form.get(k) ?? "").replace(",", ".")); return Number.isFinite(n) && n > 0 ? Math.round(n) : d; };
   const vipps = String(form.get("vipps_info") ?? "").trim() || null;
@@ -65,9 +70,9 @@ export async function createGroup(_: GroupFormState, form: FormData): Promise<Gr
   if (!me.is_sysadmin) await query("update group_invites set group_id = $2 where token = $1", [token, group!.id]);
   await query("insert into group_members (group_id, user_id, role) values ($1, $2, 'admin')", [group!.id, me.id]);
   const challenge = await one<{ id: number }>(
-    `insert into challenges (group_id, name, starts_on, ends_on, min_sessions, session_minutes, long_session_minutes, penalty_kr, vipps_info)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9) returning id`,
-    [group!.id, challengeName, startsOn, endsOn, num("min_sessions", 3), num("session_minutes", 35), num("long_session_minutes", 60), num("penalty_kr", 50), vipps],
+    `insert into challenges (group_id, name, starts_on, ends_on, min_sessions, session_minutes, long_session_minutes, penalty_kr, vipps_info, week_ends_on)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) returning id`,
+    [group!.id, challengeName, startsOn, endsOn, num("min_sessions", 3), num("session_minutes", 35), num("long_session_minutes", 60), num("penalty_kr", 50), vipps, weekEnd],
   );
   await query("insert into challenge_members (challenge_id, user_id) values ($1, $2)", [challenge!.id, me.id]);
   await query("update users set current_group_id = $2 where id = $1", [me.id, group!.id]);

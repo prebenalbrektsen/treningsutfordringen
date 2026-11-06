@@ -75,7 +75,7 @@ export default async function WelcomePage({ searchParams }: { searchParams: Prom
       )}
 
       <Step title="Varsler">
-        <p className="text-sm text-muted">Få beskjed når noen heier på deg, når en økt venter på innsjekk – og søndag kveld hvis uka holder på å glippe. Velg selv hva du vil ha.</p>
+        <p className="text-sm text-muted">Få beskjed når noen heier på deg, når en økt venter på innsjekk – og siste kvelden i uka hvis den holder på å glippe. Velg selv hva du vil ha.</p>
         <PushSettings categories={categories} prefs={me?.notify ?? {}} />
       </Step>
 

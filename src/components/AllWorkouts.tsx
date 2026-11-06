@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { FeedCard } from "@/components/FeedCard";
 import type { Board, Challenge } from "@/lib/challenge";
-import { dayHeading, mondayOf, osloDate } from "@/lib/time";
+import { dayHeading, osloDate, weekStart } from "@/lib/time";
 
 /** Everyone's checked-in workouts, newest first, grouped by day like a feed. */
 export function AllWorkouts({ c, board, me }: { c: Challenge; board: Board; me: number; isAdmin?: boolean }) {
@@ -22,7 +22,7 @@ export function AllWorkouts({ c, board, me }: { c: Challenge; board: Board; me: 
           <h2 className="mb-1.5 px-1 text-xs font-bold tracking-wider text-muted uppercase">{dayHeading(new Date(`${day}T12:00:00Z`))}</h2>
           <div className="space-y-3">
             {items.map(({ w, m }) => (
-              <FeedCard key={w.id} w={w} who={m} me={me} c={c} task={board.tasks.get(mondayOf(day))} />
+              <FeedCard key={w.id} w={w} who={m} me={me} c={c} task={board.tasks.get(weekStart(day, c))} />
             ))}
           </div>
         </section>

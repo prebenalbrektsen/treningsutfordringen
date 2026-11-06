@@ -11,7 +11,7 @@ import { activeChallenge, checkInDeadline, loadBoard, mayJoin, syncStartFor, typ
 import { one, query } from "@/lib/db";
 import { disconnectStrava, subscribeWebhook, syncStrava } from "@/lib/strava";
 import { sportLabel, WATER_SPORTS } from "@/lib/sports";
-import { addDays, formatDay, fromOsloLocal, isoWeekNumber, mondayOf, osloDate } from "@/lib/time";
+import { addDays, formatDay, fromOsloLocal, isoWeekNumber, osloDate, WEEKDAY_NAMES, weekdayOf, weekStart } from "@/lib/time";
 
 export type ActionState = { error?: string; ok?: string; link?: string } | undefined;
 
@@ -239,22 +239,39 @@ export async function saveChallenge(_: ActionState, form: FormData): Promise<Act
     form.get("join_mode") === "selected" ? "selected" : "open",
     int(form, "joker_every"),
     Math.max(0, int(form, "joker_max") ?? 2),
+    Math.min(6, Math.max(0, int(form, "week_ends_on") ?? 0)),
   ];
   if (!values[0] || !values[1] || !values[2] || values[3] == null || !values[4] || !values[5]) return { error: "Fyll inn alle feltene." };
+  const old = id ? await one<Challenge>("select * from challenges where id = $1 and group_id = $2", [id, user.group_id]) : null;
+  const weekEnd = values[16] as number;
+  let moved = "";
+  if (old && old.starts_on <= osloDate()) {
+    // Fines, weekly tasks and jokers are filed under each week's first day: the week can't shift mid-challenge.
+    if (weekEnd !== old.week_ends_on) return { error: "Ukedagen kan ikke endres etter at utfordringen har startet. Lag en ny utfordring i stedet." };
+  } else {
+    // Not started yet: begin on the first day of a whole week.
+    const start = String(values[1]);
+    const first = weekStart(start, { week_ends_on: weekEnd });
+    if (first !== start) {
+      values[1] = addDays(first, 7);
+      moved = ` Starten ble flyttet til ${WEEKDAY_NAMES[weekdayOf(values[1])]} ${formatDay(values[1])}, så første uke blir hel.`;
+    }
+  }
   if (values[2]! < values[1]!) return { error: "Sluttdato må være etter startdato." };
   if (id) {
     await query(
       `update challenges set name = $2, starts_on = $3, ends_on = $4, penalty_kr = $5, min_sessions = $6,
          session_minutes = $7, long_session_minutes = $8, vipps_info = $9, check_in_hours = $10, max_per_day = $11,
-         proof_required = $12, description = $13, long_session_counts = $14, join_mode = $15, joker_every = $16, joker_max = $17
-       where id = $1 and group_id = $18`,
+         proof_required = $12, description = $13, long_session_counts = $14, join_mode = $15, joker_every = $16, joker_max = $17,
+         week_ends_on = $18
+       where id = $1 and group_id = $19`,
       [id, ...values, user.group_id],
     );
   } else {
     const c = await one<Challenge>(
       `insert into challenges (name, starts_on, ends_on, penalty_kr, min_sessions, session_minutes, long_session_minutes, vipps_info,
-         check_in_hours, max_per_day, proof_required, description, long_session_counts, join_mode, joker_every, joker_max, group_id)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) returning *`,
+         check_in_hours, max_per_day, proof_required, description, long_session_counts, join_mode, joker_every, joker_max, week_ends_on, group_id)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) returning *`,
       [...values, user.group_id],
     );
     // Nobody is signed up automatically: everyone gets a «Bli med» card and opts in.
@@ -264,7 +281,7 @@ export async function saveChallenge(_: ActionState, form: FormData): Promise<Act
         : `📣 Ny utfordring: ${c!.name} starter ${formatDay(c!.starts_on)}. Er du invitert, ser du «Bli med» på forsiden.`);
   }
   revalidatePath("/", "layout");
-  return { ok: "Lagret." };
+  return { ok: `Lagret.${moved}` };
 }
 
 /** Opt in. Weeks that started before today don't count against you. */
@@ -326,17 +343,18 @@ export async function countThisWeek(userId: number): Promise<void> {
   const user = await requireAdmin();
   const c = await activeChallenge(user.group_id);
   if (!c || !(await inGroup(user.group_id, userId))) return;
-  const monday = fromOsloLocal(`${mondayOf(osloDate())}T00:00`);
-  await query("update challenge_members set joined_at = $3 where challenge_id = $1 and user_id = $2 and joined_at > $3", [c.id, userId, monday]);
+  const weekBegan = fromOsloLocal(`${weekStart(osloDate(), c)}T00:00`);
+  await query("update challenge_members set joined_at = $3 where challenge_id = $1 and user_id = $2 and joined_at > $3", [c.id, userId, weekBegan]);
   revalidatePath("/", "layout");
 }
 
 export async function saveTask(_: ActionState, form: FormData): Promise<ActionState> {
   const user = await requireAdmin();
   const c = await activeChallenge(user.group_id);
-  const week = mondayOf(String(form.get("week") ?? ""));
   const title = String(form.get("title") ?? "").trim();
-  if (!c || !title) return { error: "Velg uke og skriv kravet." };
+  const picked = String(form.get("week") ?? "");
+  if (!c || !title || !picked) return { error: "Velg uke og skriv kravet." };
+  const week = weekStart(picked, c);
   const auto = form.get("water") === "on" ? WATER_SPORTS : [];
   await query(
     `insert into weekly_tasks (challenge_id, week_start, title, description, auto_sports) values ($1, $2, $3, $4, $5)

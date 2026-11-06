@@ -18,7 +18,7 @@ import { DayDots, DayLetters, Highlight, ProgressRing } from "@/components/WeekD
 import { firstToFinish, personStats, rank } from "@/lib/leaderboard";
 import { query } from "@/lib/db";
 import { sportLabel } from "@/lib/sports";
-import { addDays, formatDay, formatMinutes, formatWeekRange, fromOsloLocal, isoWeekNumber, mondayOf, osloDate } from "@/lib/time";
+import { addDays, formatDay, formatMinutes, formatWeekRange, fromOsloLocal, isoWeekNumber, osloDate, weekStart } from "@/lib/time";
 
 function timeLeft(week: string): string {
   const ms = fromOsloLocal(`${addDays(week, 7)}T00:00`).getTime() - Date.now();
@@ -285,7 +285,7 @@ export default async function WeekPage({ searchParams }: { searchParams: Promise
           <>
             <ul className="divide-y divide-line">
               {feed.map(({ w, m }) => (
-                <WorkoutRow key={w.id} w={w} who={m} me={user.id} c={c} task={board.tasks.get(mondayOf(osloDate(new Date(w.started_at))))} />
+                <WorkoutRow key={w.id} w={w} who={m} me={user.id} c={c} task={board.tasks.get(weekStart(osloDate(new Date(w.started_at)), c))} />
               ))}
             </ul>
             <Link href="/logg?vis=alle" className="btn btn-ghost mt-2 w-full">Se alle økter</Link>

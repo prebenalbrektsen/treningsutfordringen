@@ -13,7 +13,7 @@ import { activeChallenge, loadBoard } from "@/lib/challenge";
 import { one } from "@/lib/db";
 import { firstFinishCounts, personStats } from "@/lib/leaderboard";
 import { computeStats } from "@/lib/stats";
-import { formatDay, isoWeekNumber, mondayOf, osloDate } from "@/lib/time";
+import { formatDay, isoWeekNumber, osloDate, weekStart } from "@/lib/time";
 
 /** Someone's profile: this week, records, chart, badges and workouts – informative from day one. */
 export default async function PersonPage({ params }: { params: Promise<{ id: string }> }) {
@@ -115,7 +115,7 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
         <h2 className="font-bold">Øktene til {first}</h2>
         <ul className="divide-y divide-line">
           {p.workouts.filter((w) => w.checked_in_at || p.id === user.id).map((w) => (
-            <WorkoutRow key={w.id} w={w} me={user.id} task={board.tasks.get(mondayOf(osloDate(new Date(w.started_at))))} c={c} isAdmin={user.is_admin} />
+            <WorkoutRow key={w.id} w={w} me={user.id} task={board.tasks.get(weekStart(osloDate(new Date(w.started_at)), c))} c={c} isAdmin={user.is_admin} />
           ))}
           {user.is_admin && p.id !== user.id && (() => {
             // The Kontrollør may nudge, but sees no details before the person shares them.

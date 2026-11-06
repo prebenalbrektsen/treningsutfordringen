@@ -18,7 +18,7 @@ import { requireUser } from "@/lib/auth";
 import { activeChallenge, loadBoard, ruleParts } from "@/lib/challenge";
 import { computeStats } from "@/lib/stats";
 import { stravaConfigured } from "@/lib/strava";
-import { ago, formatWeekRange, isoWeekNumber, mondayOf, osloDate } from "@/lib/time";
+import { ago, formatWeekRange, isoWeekNumber, osloDate, weekStart } from "@/lib/time";
 import { Icon } from "@/components/Icon";
 import { ActionForm } from "@/components/ActionForm";
 import { WatchGuide } from "@/components/WatchGuide";
@@ -141,7 +141,7 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
             {me.workouts.length ? (
               <ul className="divide-y divide-line">
                 {me.workouts.map((w) => {
-                  const week = mondayOf(osloDate(new Date(w.started_at)));
+                  const week = weekStart(osloDate(new Date(w.started_at)), c);
                   return <WorkoutRow key={w.id} w={w} me={user.id} task={board!.tasks.get(week)} c={c} canEdit={week === board!.currentWeek || user.is_admin} isAdmin={user.is_admin} />;
                 })}
               </ul>

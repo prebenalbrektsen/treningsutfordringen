@@ -11,8 +11,9 @@ import { query } from "@/lib/db";
 import { stravaConfigured, webhookStatus, webhookUrl } from "@/lib/strava";
 import { ActivateWebhook } from "@/components/ActivateWebhook";
 import { UNDECIDED_SHARE_UNTIL } from "@/lib/sharing";
-import { addDays, ago, formatDay, formatWeekRange, isoWeekNumber, mondayOf, osloDate, relativeTime } from "@/lib/time";
+import { addDays, ago, formatDay, formatWeekRange, isoWeekNumber, mondayOf, osloDate, relativeTime, WEEKDAY_NAMES } from "@/lib/time";
 import { sportLabel } from "@/lib/sports";
+import { WeekEndSelect } from "@/components/WeekEndSelect";
 import { activateStravaWebhook, adminSyncStrava, approveUser, removeInvite, confirmAllClaimed, createGroupLink, disableGroupLink, remindStravaChoice, saveGroupSettings, rejectUser, deleteTask, newInvite, saveChallenge, saveTask, setFine, settleAll, toggleInvite, toggleMember, countThisWeek } from "../actions";
 
 const TABS = ADMIN_TABS;
@@ -25,9 +26,15 @@ function ChallengeFields({ c }: { c?: Challenge }) {
       {c && <input type="hidden" name="id" value={c.id} />}
       <label className="block"><span className="label">Navn</span><input name="name" className="field" defaultValue={c?.name ?? "Høstbøtta"} required /></label>
       <div className="grid grid-cols-2 gap-3">
-        <label className="block"><span className="label">Start (mandag)</span><input type="date" name="starts_on" className="field" defaultValue={start} required /></label>
-        <label className="block"><span className="label">Slutt (søndag)</span><input type="date" name="ends_on" className="field" defaultValue={c?.ends_on ?? addDays(start, 8 * 7 - 1)} required /></label>
+        <label className="block"><span className="label">Start</span><input type="date" name="starts_on" className="field" defaultValue={start} required /></label>
+        <label className="block"><span className="label">Slutt</span><input type="date" name="ends_on" className="field" defaultValue={c?.ends_on ?? addDays(start, 8 * 7 - 1)} required /></label>
       </div>
+      <WeekEndSelect value={c?.week_ends_on ?? 0} disabled={!!c && c.starts_on <= today} />
+      <p className="-mt-1 text-xs text-muted">
+        {c && c.starts_on <= today
+          ? `Uka går ${WEEKDAY_NAMES[(c.week_ends_on + 1) % 7]}–${WEEKDAY_NAMES[c.week_ends_on]}. Det kan ikke endres etter at utfordringen har startet.`
+          : "Fristen for ukas økter er kl. 24 denne dagen. Starter utfordringen midt i en uke, flyttes starten til første hele uke."}
+      </p>
       <div className="grid grid-cols-3 gap-3">
         <label className="block"><span className="label">Økter per uke</span><input type="number" min={1} name="min_sessions" className="field" defaultValue={c?.min_sessions ?? 3} required /></label>
         <label className="block"><span className="label">Min per økt</span><input type="number" min={1} name="session_minutes" className="field" defaultValue={c?.session_minutes ?? 35} required /></label>
@@ -106,7 +113,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   const pending = allUsers.filter((u) => !u.approved);
   const groupToken = (await query<{ join_token: string | null }>("select join_token from groups where id = $1", [user.group_id]))[0]?.join_token ?? null;
   const memberIds = new Set(board?.members.map((m) => m.id));
-  // Joined mid-week: not counted until next Monday, unless the admin lets this week count.
+  // Joined mid-week: not counted until next week starts, unless the admin lets this week count.
   const waiting = new Set(board?.members.filter((m) => m.results.find((r) => r.week === board.currentWeek)?.state === "before").map((m) => m.id));
   const invited = new Set(
     c ? (await query<{ user_id: number }>("select user_id from challenge_invites where challenge_id = $1", [c.id])).map((r) => r.user_id) : [],
@@ -369,7 +376,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
               </section>
               <section className="card space-y-2 p-4">
                 <h2 className="font-bold">Forhåndsvis feiringer</h2>
-                <p className="text-sm text-muted">Slik ser det ut når uka er over (vises én gang, første gang de åpner appen etter søndag), når noen sparer en joker eller får et nytt merke.</p>
+                <p className="text-sm text-muted">Slik ser det ut når uka er over (vises én gang, første gang de åpner appen etter at uka er over), når noen sparer en joker eller får et nytt merke.</p>
                 <CelebrationPreview jokers={{ held: 1, max: c.joker_max, every: c.joker_every ?? 1 }} />
               </section>
               <section className="card space-y-2 p-4">

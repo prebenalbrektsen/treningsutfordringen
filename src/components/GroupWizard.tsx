@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { createGroup, type GroupFormState } from "@/app/ny-gruppe/actions";
+import { WeekEndSelect } from "@/components/WeekEndSelect";
 
 const TITLES = ["Kontrolløren", "Generalen", "Treneren", "Sjefen", "Bøtevokteren", "Dommeren"];
 
@@ -45,6 +46,8 @@ export function GroupWizard({ token }: { token?: string }) {
           <label className="block"><span className="label">Starter</span><input type="date" name="starts_on" className="field" defaultValue={start} required /></label>
           <label className="block"><span className="label">Slutter</span><input type="date" name="ends_on" className="field" defaultValue={plusWeeks(start, 8)} required /></label>
         </div>
+        <WeekEndSelect />
+        <p className="-mt-1 text-xs text-muted">Fristen for ukas økter er kl. 24 denne dagen. Starter dere midt i en uke, flyttes starten til første hele uke.</p>
         <div className="grid grid-cols-3 gap-3">
           <label className="block"><span className="label">Økter/uke</span><input name="min_sessions" inputMode="numeric" className="field" defaultValue="3" /></label>
           <label className="block"><span className="label">Min. per økt</span><input name="session_minutes" inputMode="numeric" className="field" defaultValue="35" /></label>

@@ -1,9 +1,11 @@
 import Link from "next/link";
 import type { Challenge, WeekResult } from "@/lib/challenge";
 import { workoutCredit } from "@/lib/challenge";
-import { addDays, osloDate } from "@/lib/time";
+import { addDays, osloDate, weekdayOf } from "@/lib/time";
 
-const DAY_LETTERS = ["M", "T", "O", "T", "F", "L", "S"];
+// Sunday first (index = weekdayOf); a week can start on any day.
+const DAY_LETTERS = ["S", "M", "T", "O", "T", "F", "L"];
+const SEVEN = [0, 1, 2, 3, 4, 5, 6];
 
 /** The week's progress as a ring: workouts counted out of the requirement. */
 export function ProgressRing({ c, r, size = 104 }: { c: Challenge; r: WeekResult; size?: number }) {
@@ -25,7 +27,7 @@ export function ProgressRing({ c, r, size = 104 }: { c: Challenge; r: WeekResult
 }
 
 /**
- * Monday–Sunday as dots: filled for a workout that counts (a «2» on a long one), an outline while
+ * The week's seven days as dots: filled for a workout that counts (a «2» on a long one), an outline while
  * one waits for check-in. Shows at a glance who trained when.
  */
 export function DayDots({ c, r, week, size = "md" }: { c: Challenge; r: WeekResult; week: string; size?: "sm" | "md" }) {
@@ -33,7 +35,7 @@ export function DayDots({ c, r, week, size = "md" }: { c: Challenge; r: WeekResu
   const px = size === "sm" ? "h-4 w-4 text-[9px]" : "h-6 w-6 text-[11px]";
   return (
     <div className="flex gap-1">
-      {DAY_LETTERS.map((_, i) => {
+      {SEVEN.map((i) => {
         const day = addDays(week, i);
         const ws = r.workouts.filter((w) => osloDate(new Date(w.started_at)) === day);
         const counted = ws.find((w) => w.status === "counts");
@@ -55,9 +57,10 @@ export function DayLetters({ week }: { week: string }) {
   const today = osloDate();
   return (
     <div className="flex gap-1">
-      {DAY_LETTERS.map((l, i) => (
-        <span key={i} className={`w-4 text-center text-[10px] ${addDays(week, i) === today ? "rounded-sm bg-ink font-bold text-paper" : "font-semibold text-muted"}`}>{l}</span>
-      ))}
+      {SEVEN.map((i) => {
+        const day = addDays(week, i);
+        return <span key={i} className={`w-4 text-center text-[10px] ${day === today ? "rounded-sm bg-ink font-bold text-paper" : "font-semibold text-muted"}`}>{DAY_LETTERS[weekdayOf(day)]}</span>;
+      })}
     </div>
   );
 }

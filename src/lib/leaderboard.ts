@@ -1,6 +1,6 @@
 import type { Board, Challenge, Workout } from "./challenge";
 import { query } from "./db";
-import { addDays, mondayOf, osloDate } from "./time";
+import { addDays, osloDate, weekStart } from "./time";
 
 type Member = Board["members"][number];
 export type Period = "uke" | "alt";
@@ -33,7 +33,7 @@ function streaks(m: Member): { streak: number; best: number } {
 
 export async function personStats(c: Challenge, board: Board, period: Period): Promise<PersonStats[]> {
   const week = board.currentWeek;
-  const inPeriod = (w: Workout) => period === "alt" || mondayOf(osloDate(new Date(w.started_at))) === week;
+  const inPeriod = (w: Workout) => period === "alt" || weekStart(osloDate(new Date(w.started_at)), c) === week;
   const given = await query<{ user_id: number; n: number }>(
     `select k.user_id, count(*)::int as n from kudos k join workouts w on w.id = k.workout_id
       where k.group_id = $3 and w.started_at >= ($1::date)::timestamp at time zone 'Europe/Oslo'

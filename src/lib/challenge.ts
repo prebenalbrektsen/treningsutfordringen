@@ -1,6 +1,6 @@
 import { one, query } from "./db";
 import { effectivePrefs, redact, type ShareState } from "./sharing";
-import { addDays, fromOsloLocal, mondayOf, osloDate, weeksBetween } from "./time";
+import { addDays, fromOsloLocal, osloDate, WEEKDAY_NAMES, weekStart, weeksBetween } from "./time";
 
 export type Challenge = {
   id: number;
@@ -21,6 +21,7 @@ export type Challenge = {
   join_mode: "open" | "selected";
   joker_every: number | null;
   joker_max: number;
+  week_ends_on: number; // 0 = Sunday … 6 = Saturday
 };
 
 export type Jokers = { enabled: boolean; held: number; earnedTotal: number; used: number; progress: number; every: number; max: number };
@@ -175,6 +176,7 @@ export function ruleParts(c: Challenge): string[] {
       ? `eller 1 × ${c.long_session_minutes} min`
       : `${c.long_session_minutes}+ min teller som ${c.long_session_counts}`);
   }
+  if (c.week_ends_on !== 0) parts.push(`uka går ${WEEKDAY_NAMES[(c.week_ends_on + 1) % 7]}–${WEEKDAY_NAMES[c.week_ends_on]}`);
   if (c.max_per_day) parts.push(c.max_per_day === 1 ? "maks 1 økt per dag" : `maks ${c.max_per_day} økter per dag`);
   parts.push(c.check_in_hours ? `sjekk inn innen ${c.check_in_hours} t` : "sjekk inn før uka er over");
   if (c.proof_required) parts.push("bilde påkrevd");
@@ -186,17 +188,17 @@ export function ruleParts(c: Challenge): string[] {
 /** The first week that counts for someone: everything if they joined before the start, else the first full week after joining. */
 export function firstCountedWeek(c: Challenge, joinedAt: Date): string {
   const joined = osloDate(new Date(joinedAt));
-  if (joined <= c.starts_on) return mondayOf(c.starts_on);
-  const monday = mondayOf(joined);
-  return monday === joined ? monday : addDays(monday, 7);
+  if (joined <= c.starts_on) return weekStart(c.starts_on, c);
+  const first = weekStart(joined, c);
+  return first === joined ? first : addDays(first, 7);
 }
 
 /**
  * Check in within the challenge's window after finishing (or after Strava delivered it, if it
- * synced late), and always before the week closes on Sunday at midnight.
+ * synced late), and always before the week closes at midnight on its last day.
  */
 export function checkInDeadline(c: Challenge, w: Pick<Workout, "started_at" | "duration_min" | "imported_at">): Date {
-  const weekEnd = fromOsloLocal(`${addDays(mondayOf(osloDate(new Date(w.started_at))), 7)}T00:00`).getTime();
+  const weekEnd = fromOsloLocal(`${addDays(weekStart(osloDate(new Date(w.started_at)), c), 7)}T00:00`).getTime();
   if (!c.check_in_hours) return new Date(weekEnd);
   const finished = new Date(w.started_at).getTime() + w.duration_min * 60000;
   const base = Math.max(finished, new Date(w.imported_at).getTime());
@@ -205,7 +207,7 @@ export function checkInDeadline(c: Challenge, w: Pick<Workout, "started_at" | "d
 
 /**
  * Sets each workout's status. Only `max_per_day` workouts per day count toward the week (the
- * longest checked-in ones), so three workouts squeezed into Sunday don't complete a week.
+ * longest checked-in ones), so three workouts squeezed into the last day don't complete a week.
  * Pass one person's workouts.
  */
 export function annotate(c: Challenge, workouts: Workout[], now = new Date()): Workout[] {
@@ -285,7 +287,7 @@ export type Board = {
  */
 export async function loadBoard(c: Challenge, viewerId?: number): Promise<Board> {
   const today = osloDate();
-  const weeks = weeksBetween(c.starts_on, c.ends_on);
+  const weeks = weeksBetween(c.starts_on, c.ends_on, c);
   const [members, rawWorkouts, tasks, fines, jokerUses] = await Promise.all([
     query<Member & ShareState>(
       `select u.id, u.name, u.color, u.strava_athlete_id::text,
@@ -333,13 +335,13 @@ export async function loadBoard(c: Challenge, viewerId?: number): Promise<Board>
   return {
     challenge: c,
     weeks,
-    currentWeek: mondayOf(today),
+    currentWeek: weekStart(today, c),
     tasks: taskMap,
     members: members.map(({ share_distance: _d, share_elevation: _e, share_hr: _h, share_title: _t, strava_consent_at: _c, ...m }) => {
       const mine = workouts.filter((w) => w.user_id === m.id);
       const first = firstCountedWeek(c, m.joined_at);
       const results: WeekResult[] = weeks.map((week) => {
-        const inWeek = mine.filter((w) => mondayOf(osloDate(w.started_at)) === week);
+        const inWeek = mine.filter((w) => weekStart(osloDate(w.started_at), c) === week);
         const r = evaluateWeek(c, week, inWeek, taskMap.get(week), today);
         if (week < first) return { ...r, state: "before" as const, passed: false, fine: null };
         // Jokers applied to this week fill missing workouts.

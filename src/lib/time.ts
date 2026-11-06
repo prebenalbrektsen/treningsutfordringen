@@ -1,5 +1,6 @@
-// Every week runs Monday 00:00 to Sunday 24:00 Norwegian time, so all date maths uses
-// Europe/Oslo calendar dates as plain "YYYY-MM-DD" strings.
+// A week runs seven days ending on the challenge's `week_ends_on` (0 = Sunday … 6 = Saturday;
+// Sunday by default, so Monday–Sunday). All date maths uses Europe/Oslo calendar dates as plain
+// "YYYY-MM-DD" strings, and a week is identified by its first day.
 const TZ = "Europe/Oslo";
 
 export function osloDate(at: Date = new Date()): string {
@@ -12,20 +13,41 @@ export function addDays(date: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-export function mondayOf(date: string): string {
-  const weekday = new Date(`${date}T12:00:00Z`).getUTCDay(); // 0 = Sunday
-  return addDays(date, -((weekday + 6) % 7));
+/** 0 = Sunday … 6 = Saturday, like Date.getUTCDay(). */
+export function weekdayOf(date: string): number {
+  return new Date(`${date}T12:00:00Z`).getUTCDay();
 }
 
-/** Monday dates of every week the challenge touches, first to last. */
-export function weeksBetween(startsOn: string, endsOn: string): string[] {
+/** What decides where a week starts: the challenge's last weekday. */
+export type WeekRule = { week_ends_on: number };
+
+/** Nominative names, Sunday first (index = weekdayOf). */
+export const WEEKDAY_NAMES = ["søndag", "mandag", "tirsdag", "onsdag", "torsdag", "fredag", "lørdag"];
+
+/** The first day of the week `date` falls in. */
+export function weekStart(date: string, rule: WeekRule): string {
+  const first = (rule.week_ends_on + 1) % 7;
+  return addDays(date, -((weekdayOf(date) - first + 7) % 7));
+}
+
+/** Monday–Sunday weeks, regardless of any challenge. */
+export function mondayOf(date: string): string {
+  return weekStart(date, { week_ends_on: 0 });
+}
+
+/** First days of every week the challenge touches, first to last. */
+export function weeksBetween(startsOn: string, endsOn: string, rule: WeekRule): string[] {
   const weeks: string[] = [];
-  for (let w = mondayOf(startsOn); w <= endsOn; w = addDays(w, 7)) weeks.push(w);
+  for (let w = weekStart(startsOn, rule); w <= endsOn; w = addDays(w, 7)) weeks.push(w);
   return weeks;
 }
 
-export function isoWeekNumber(monday: string): number {
-  const thursday = new Date(`${addDays(monday, 3)}T12:00:00Z`); // Thursday decides the ISO year
+/**
+ * The week's number: the ISO week holding most of its days (its fourth day). For a normal
+ * Monday–Sunday week that's simply the ISO week.
+ */
+export function isoWeekNumber(weekStartDay: string): number {
+  const thursday = new Date(`${addDays(mondayOf(addDays(weekStartDay, 3)), 3)}T12:00:00Z`); // Thursday decides the ISO year
   const yearStart = Date.UTC(thursday.getUTCFullYear(), 0, 1);
   return Math.floor((thursday.getTime() - yearStart) / 86400000 / 7) + 1;
 }

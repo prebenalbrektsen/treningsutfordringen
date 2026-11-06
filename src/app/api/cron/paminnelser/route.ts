@@ -3,15 +3,14 @@ import { query } from "@/lib/db";
 import { movedNotice } from "@/lib/moved";
 import { everyone, once, push } from "@/lib/push";
 import { sportLabel } from "@/lib/sports";
-import { addDays, mondayOf, osloDate } from "@/lib/time";
+import { addDays, osloDate, weekdayOf, weekStart } from "@/lib/time";
 
 // Scheduled reminders (vercel.json runs this a few times a day, never at night):
 // - a workout's check-in deadline is coming up within 4 hours
-// - Sunday evening: your week isn't in the bag yet
+// - the evening of the week's last day: your week isn't in the bag yet
 // Each reminder is sent once (push_sent). Vercel signs the call with CRON_SECRET; without it set, nothing runs.
 
 const osloHour = () => Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Oslo", hour: "numeric", hourCycle: "h23" }).format(new Date()));
-const osloWeekday = () => new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Oslo", weekday: "short" }).format(new Date());
 
 export async function GET(request: Request) {
   if (!process.env.CRON_SECRET || request.headers.get("authorization") !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -41,7 +40,7 @@ async function remindGroup(groupId: number): Promise<number> {
   const today = osloDate();
   if (today < c.starts_on || today > c.ends_on) return 0;
 
-  const week = mondayOf(today);
+  const week = weekStart(today, c);
   const members = await query<{ user_id: number; joined_at: Date }>("select user_id, joined_at from challenge_members where challenge_id = $1", [c.id]);
   const ids = members.map((m) => m.user_id);
   const workouts = await query<Workout>(
@@ -65,12 +64,12 @@ async function remindGroup(groupId: number): Promise<number> {
     sent++;
   }
 
-  // 2) Sunday from 17:00: whoever hasn't got the week in the bag yet.
-  if (osloWeekday() === "Sun" && osloHour() >= 17) {
+  // 2) The week's last day from 17:00: whoever hasn't got the week in the bag yet.
+  if (weekdayOf(today) === c.week_ends_on && osloHour() >= 17) {
     const board = await loadBoard(c); // for each person's jokers
     for (const m of members) {
       if (firstCountedWeek(c, m.joined_at) > week) continue;
-      const mine = workouts.filter((w) => w.user_id === m.user_id && mondayOf(osloDate(new Date(w.started_at))) === week);
+      const mine = workouts.filter((w) => w.user_id === m.user_id && weekStart(osloDate(new Date(w.started_at)), c) === week);
       const r = evaluateWeek(c, week, mine, task, today);
       if (r.passed || !(await once(`sunday:${c.id}:${week}:${m.user_id}`))) continue;
       const missing = Math.max(0, c.min_sessions - r.qualifying);

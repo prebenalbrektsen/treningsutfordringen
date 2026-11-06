@@ -11,7 +11,7 @@ import { WatchGuide } from "@/components/WatchGuide";
 import { Icon } from "@/components/Icon";
 import { one, query } from "@/lib/db";
 import { stravaConfigured } from "@/lib/strava";
-import { addDays, ago, mondayOf, osloDate, toOsloLocalInput } from "@/lib/time";
+import { addDays, ago, osloDate, toOsloLocalInput, weekStart } from "@/lib/time";
 
 export default async function LogPage({ searchParams }: { searchParams: Promise<{ vis?: string }> }) {
   const user = await requireUser();
@@ -30,7 +30,7 @@ export default async function LogPage({ searchParams }: { searchParams: Promise<
       </div>
     );
   }
-  const week = mondayOf(osloDate());
+  const week = weekStart(osloDate(), c);
   const task = await one<WeeklyTask>("select id, week_start, title, description, auto_sports from weekly_tasks where challenge_id = $1 and week_start = $2", [c.id, week]);
   const form = (
     <LogForm

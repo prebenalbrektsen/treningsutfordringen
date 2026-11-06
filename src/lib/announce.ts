@@ -1,9 +1,9 @@
 import { activeChallenge, applyVerdicts, evaluateWeek, loadBoard, WORKOUT_COLUMNS, type WeeklyTask, type Workout } from "./challenge";
 import { one, query } from "./db";
 import { everyoneBut, push } from "./push";
-import { addDays, isoWeekNumber, mondayOf, osloDate } from "./time";
+import { addDays, isoWeekNumber, osloDate, weekStart } from "./time";
 
-/** The app's own news in a group's chat («Ida har uka i boks», the Monday summary), pushed like a chat message. */
+/** The app's own news in a group's chat («Ida har uka i boks», the end-of-week summary), pushed like a chat message. */
 export async function postToGroup(groupId: number, eventKey: string | null, body: string): Promise<void> {
   const added = await query(
     "insert into messages (group_id, user_id, body, event_key) values ($1, null, $2, $3) on conflict (group_id, event_key) do nothing returning 1",
@@ -29,8 +29,8 @@ export async function announceWeek(userId: number): Promise<void> {
 async function announceWeekIn(groupId: number, userId: number): Promise<void> {
   const c = await activeChallenge(groupId);
   if (!c) return;
-  const week = mondayOf(osloDate());
-  if (week < mondayOf(c.starts_on) || week > c.ends_on) return;
+  const week = weekStart(osloDate(), c);
+  if (week < weekStart(c.starts_on, c) || week > c.ends_on) return;
   const member = await one<{ name: string }>(
     "select u.name from challenge_members m join users u on u.id = m.user_id where m.challenge_id = $1 and m.user_id = $2",
     [c.id, userId],
@@ -53,21 +53,23 @@ async function announceWeekIn(groupId: number, userId: number): Promise<void> {
 }
 
 /** Once a week is over: a short summary in each group of who made it and what went in the bucket. */
-// Remembered per server instance, so the summary check doesn't touch the database on every page view.
+// Remembered per server instance, so the summary check touches the database once a day, not on every page view.
+// (Each group's week can end on a different weekday, so check every day.)
 let summaryDoneFor = "";
 
 export async function announceWeekSummary(): Promise<void> {
-  const lastWeek = addDays(mondayOf(osloDate()), -7);
-  if (summaryDoneFor === lastWeek) return;
+  const today = osloDate();
+  if (summaryDoneFor === today) return;
   const groups = await query<{ id: number }>("select id from groups where disabled_at is null");
-  for (const g of groups) await weekSummaryIn(g.id, lastWeek);
-  summaryDoneFor = lastWeek;
+  for (const g of groups) await weekSummaryIn(g.id, today);
+  summaryDoneFor = today;
 }
 
-async function weekSummaryIn(groupId: number, lastWeek: string): Promise<void> {
+async function weekSummaryIn(groupId: number, today: string): Promise<void> {
   const c = await activeChallenge(groupId);
   if (!c) return;
-  if (lastWeek < mondayOf(c.starts_on) || lastWeek > c.ends_on) return;
+  const lastWeek = addDays(weekStart(today, c), -7);
+  if (lastWeek < weekStart(c.starts_on, c) || lastWeek > c.ends_on) return;
   if (await one("select 1 from messages where group_id = $1 and event_key = $2", [groupId, `summary:${c.id}:${lastWeek}`])) return;
   const board = await loadBoard(c);
   const i = board.weeks.indexOf(lastWeek);
