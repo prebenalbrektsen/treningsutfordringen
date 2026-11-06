@@ -55,6 +55,7 @@ export async function createGroup(_: GroupFormState, form: FormData): Promise<Gr
   const endsOn = String(form.get("ends_on") ?? "");
   const num = (k: string, d: number) => { const n = Number(String(form.get(k) ?? "").replace(",", ".")); return Number.isFinite(n) && n > 0 ? Math.round(n) : d; };
   const vipps = String(form.get("vipps_info") ?? "").trim() || null;
+  const mergeMode = (["back_to_back", "same_day"] as const).find((m) => m === form.get("merge_mode")) ?? "off";
   if (!groupName || !challengeName || !startsOn || !endsOn) return { error: "Gi gruppa og utfordringen et navn, og velg datoer." };
   if (endsOn < startsOn) return { error: "Sluttdatoen må være etter startdatoen." };
 
@@ -70,9 +71,9 @@ export async function createGroup(_: GroupFormState, form: FormData): Promise<Gr
   if (!me.is_sysadmin) await query("update group_invites set group_id = $2 where token = $1", [token, group!.id]);
   await query("insert into group_members (group_id, user_id, role) values ($1, $2, 'admin')", [group!.id, me.id]);
   const challenge = await one<{ id: number }>(
-    `insert into challenges (group_id, name, starts_on, ends_on, min_sessions, session_minutes, long_session_minutes, penalty_kr, vipps_info, week_ends_on)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) returning id`,
-    [group!.id, challengeName, startsOn, endsOn, num("min_sessions", 3), num("session_minutes", 35), num("long_session_minutes", 60), num("penalty_kr", 50), vipps, weekEnd],
+    `insert into challenges (group_id, name, starts_on, ends_on, min_sessions, session_minutes, long_session_minutes, penalty_kr, vipps_info, week_ends_on, merge_mode)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) returning id`,
+    [group!.id, challengeName, startsOn, endsOn, num("min_sessions", 3), num("session_minutes", 35), num("long_session_minutes", 60), num("penalty_kr", 50), vipps, weekEnd, mergeMode],
   );
   await query("insert into challenge_members (challenge_id, user_id) values ($1, $2)", [challenge!.id, me.id]);
   await query("update users set current_group_id = $2 where id = $1", [me.id, group!.id]);

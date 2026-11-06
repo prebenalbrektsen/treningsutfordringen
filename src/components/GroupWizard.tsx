@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { createGroup, type GroupFormState } from "@/app/ny-gruppe/actions";
 import { WeekEndSelect } from "@/components/WeekEndSelect";
+import { MergeModeSelect } from "@/components/MergeModeSelect";
 
 const TITLES = ["Kontrolløren", "Generalen", "Treneren", "Sjefen", "Bøtevokteren", "Dommeren"];
 
@@ -54,8 +55,9 @@ export function GroupWizard({ token }: { token?: string }) {
           <label className="block"><span className="label">Bot (kr)</span><input name="penalty_kr" inputMode="numeric" className="field" defaultValue="50" /></label>
         </div>
         <label className="block"><span className="label">Én langøkt holder i stedet (minutter)</span><input name="long_session_minutes" inputMode="numeric" className="field" defaultValue="60" /></label>
+        <MergeModeSelect />
         <label className="block"><span className="label">Vipps-lenke til bøtekassa (valgfritt)</span><input name="vipps_info" className="field" placeholder="https://qr.vipps.no/…" /></label>
-        <p className="text-xs text-muted">Resten (jokere, bilde-krav, innsjekkingsfrist, ukeskrav, sammenslåing av økter) finner du under Admin etterpå.</p>
+        <p className="text-xs text-muted">Resten (jokere, bilde-krav, innsjekkingsfrist, ukeskrav) finner du under Admin etterpå.</p>
       </section>
 
       {state?.error && <p className="rounded-xl bg-bad-soft px-4 py-3 text-sm font-semibold text-bad">{state.error}</p>}

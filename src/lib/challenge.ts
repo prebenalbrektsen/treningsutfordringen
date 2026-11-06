@@ -1,5 +1,6 @@
 import { one, query } from "./db";
 import { effectivePrefs, redact, type ShareState } from "./sharing";
+import { MERGE_BREAK_MIN, type MergeMode } from "./merge-rule";
 import { addDays, fromOsloLocal, osloDate, WEEKDAY_NAMES, weekStart, weeksBetween } from "./time";
 
 export type Challenge = {
@@ -25,9 +26,7 @@ export type Challenge = {
   merge_mode: MergeMode;
 };
 
-/** Whether participants may merge workouts into one: never, back to back (same day, short break) or any on the same day. */
-export type MergeMode = "off" | "back_to_back" | "same_day";
-export const MERGE_BREAK_MIN = 30;
+export { MERGE_BREAK_MIN, type MergeMode } from "./merge-rule";
 
 export type Jokers = { enabled: boolean; held: number; earnedTotal: number; used: number; progress: number; every: number; max: number };
 

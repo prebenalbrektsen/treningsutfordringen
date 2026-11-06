@@ -6,7 +6,7 @@ import { AddParticipantForm } from "@/components/AddParticipantForm";
 import { ActionMenu } from "@/components/ActionMenu";
 import { Icon } from "@/components/Icon";
 import { requireAdmin } from "@/lib/auth";
-import { activeChallenge, loadBoard, MERGE_BREAK_MIN, type Challenge } from "@/lib/challenge";
+import { activeChallenge, loadBoard, type Challenge } from "@/lib/challenge";
 import { query } from "@/lib/db";
 import { stravaConfigured, webhookStatus, webhookUrl } from "@/lib/strava";
 import { ActivateWebhook } from "@/components/ActivateWebhook";
@@ -14,6 +14,7 @@ import { UNDECIDED_SHARE_UNTIL } from "@/lib/sharing";
 import { addDays, ago, formatDay, formatWeekRange, isoWeekNumber, mondayOf, osloDate, relativeTime, WEEKDAY_NAMES } from "@/lib/time";
 import { sportLabel } from "@/lib/sports";
 import { WeekEndSelect } from "@/components/WeekEndSelect";
+import { MergeModeSelect } from "@/components/MergeModeSelect";
 import { activateStravaWebhook, adminSyncStrava, approveUser, removeInvite, confirmAllClaimed, createGroupLink, disableGroupLink, remindStravaChoice, saveGroupSettings, rejectUser, deleteTask, newInvite, saveChallenge, saveTask, setFine, settleAll, toggleInvite, toggleMember, countThisWeek } from "../actions";
 
 const TABS = ADMIN_TABS;
@@ -61,15 +62,7 @@ function ChallengeFields({ c }: { c?: Challenge }) {
           <input type="number" min={1} name="max_per_day" className="field" defaultValue={c ? (c.max_per_day ?? "") : 1} />
         </label>
       </div>
-      <label className="block">
-        <span className="label">Slå sammen økter (f.eks. styrke + løping = én langøkt)</span>
-        <select name="merge_mode" className="field" defaultValue={c?.merge_mode ?? "off"}>
-          <option value="off">Nei – hver økt teller for seg</option>
-          <option value="back_to_back">Bare rett etter hverandre (maks {MERGE_BREAK_MIN} min pause)</option>
-          <option value="same_day">Alle økter samme dag</option>
-        </select>
-      </label>
-      <p className="-mt-1 text-xs text-muted">Deltakeren slår dem sammen selv før innsjekk, og minuttene legges sammen. Alle ser at økta er sammenslått, og du kan underkjenne som vanlig.</p>
+      <MergeModeSelect value={c?.merge_mode} />
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" name="proof_required" className="h-5 w-5 accent-[#ff4d1c]" defaultChecked={c ? c.proof_required : true} />
         Bilde påkrevd for å sjekke inn (også for Strava-økter)
